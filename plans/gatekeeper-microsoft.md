@@ -208,3 +208,64 @@ a `var`.
 
 - Should calendar invite-sending (automatic under `Calendars.ReadWrite` when an event
   has `attendees`) be deferred alongside `Mail.Send`, or is that acceptable to ship now?
+
+## Phase 1 implementation notes (2026-08-25)
+
+Files added under `packages/gatekeeper-microsoft/src/`:
+
+- `microsoft.ts` — `GatekeeperVendor`, `UserAccount` (OAuth DO, ported structurally from
+  `gatekeeper-google`'s), `MicrosoftUserImpl`, `MicrosoftVerifier`, and the two resource
+  gatekeepers: `OutlookMailGatekeeperImpl` / `OutlookCalendarGatekeeperImpl` with their
+  session implementations.
+- `microsoft-api.ts` — OAuth token exchange/refresh against
+  `login.microsoftonline.com/{tenant}/oauth2/v2.0/token`, `MailApi`, `CalendarApi`.
+- `auth-retry.ts` — ported **unchanged** from `gatekeeper-google` (401 retry-with-refresh,
+  429/5xx backoff, `AccessTokenCache`). Nothing in it was Google-specific.
+
+**Deliberately out of scope for this pass, per the SKILL's Phase 1/Phase 2 split:**
+
+- **No approval-queue wiring.** Every read and write in both session implementations calls
+  Microsoft Graph directly. `authorizeObservation()` / `submitAction()` / `applyAction()` are
+  not called anywhere yet — `applyAction`/`rejectAction` on both gatekeepers currently throw
+  "unknown action" because nothing is ever submitted. This is Phase 2's first task (see
+  `write-gatekeeper/SKILL.md`, "Phase 2: Logging, approvals, caching, simulation, and
+  observers"). **Do not deploy or enable this gatekeeper before Phase 2 lands** — as
+  implemented, every action it exposes to an agent executes immediately and unreviewed.
+- **No resource configurator UI.** `startResourceConfigurator()` throws with a clear message.
+  Step 6 of the SKILL (folder picker, calendar picker) is unbuilt.
+- **Not registered with `scripts/deploy.ts` or `deployment.jsonc`.** The wrapper-specific
+  integration work described above (packageDirs, generateConfigs, build step, deploy
+  ordering, service bindings) has not been done, so `pnpm check`/`pnpm deploy` neither build
+  nor deploy this package. It cannot reach production by accident.
+- **No caching or simulation.** Mail conversation listing groups messages by
+  `conversationId` within a single fetched page only — a conversation whose most recent
+  message falls on a different page can be missed or duplicated across pages. Flagged inline
+  in `microsoft-api.ts`. This is the exact caching gap the SKILL calls out for Gmail's list
+  API; fixing it is Phase 2 caching work.
+- **HTML↔Markdown conversion is a light first pass** (`htmlToPlainText` / `markdownToHtml` in
+  `microsoft-api.ts`), not a full converter. Adequate for plain messages; loses structure
+  (lists, links, formatting) that `gatekeeper-google`'s dedicated converter preserves.
+- **Placeholder logo asset** (`microsoft-logo.svg`) — a simplified four-square mark, not a
+  licensed Microsoft brand asset. Replace before this is shown to real users.
+- **Per-user avatar not fetched** — `AccountDescription.avatar` is a generic placeholder
+  since Graph's photo endpoint (`GET /me/photo/$value`) needs a separate authenticated binary
+  fetch, not implemented this pass.
+
+**Verification performed:** `tsc --noEmit` on the package (clean), and `wrangler deploy
+--dry-run` (bundles and dry-run-deploys cleanly with `TENANT_ID` baked in). Neither proves
+correctness against a real Microsoft Graph tenant — no live OAuth flow or Graph call has been
+exercised. That requires `CLIENT_ID`/`CLIENT_SECRET` and registration in `deployment.jsonc`,
+which is deliberately not done yet.
+
+## Next steps
+
+1. Resource configurator UI (SKILL Step 6).
+2. Phase 2: approval-queue wiring, caching (especially the conversation-listing gap above),
+   simulation, and confirming the observer strategies against real Graph behavior.
+3. Wrapper integration: register in `scripts/deploy.ts` and `deployment.jsonc`, following
+   "Wrapper-specific integration work" above.
+4. A real HTML↔Markdown converter and real per-user avatar fetch, if the first-pass versions
+   prove insufficient in testing.
+5. Manual end-to-end test against a real Knox Microsoft 365 account once `CLIENT_ID`/
+   `CLIENT_SECRET` are provisioned (Azure App Registration, single-tenant, redirect URI
+   `<PUBLIC_BASE_URL>/gatekeeper/microsoft/oauth`).
