@@ -1,117 +1,73 @@
 {
-  // Cloudflare account that owns every Worker and provisioned resource.
-  // Find it: https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/
-  "accountId": "<CLOUDFLARE_ACCOUNT_ID>",
+  // Knox Grammar School Enterprise.
+  "accountId": "2ddaede0fbdd479a6bf410a5f1eb76ad",
 
-  // The deployment's public origin, used for PUBLIC_BASE_URL and to scope Context data.
-  // null derives it from workers.router.route.customDomain.
-  // Required when the router uses workersDev: the account's workers.dev subdomain is not
-  // knowable from this file. Write it as a bare origin, no path and no trailing slash --
-  // "https://<router-name>.<subdomain>.workers.dev".
+  // null derives it from workers.router.route.customDomain below.
   "publicBaseUrl": null,
 
-  // Worker names are permanent service identities. Keep them unique within the account.
-  // Reference: docs/customization.md#workers-and-routing
+  // Worker names are permanent service identities and cannot be renamed without stranding the
+  // Durable Objects and storage that belong to them. Verified free in this account 2026-08-25;
+  // note the existing unrelated "knoxi-os" showcase Worker, which these must not collide with.
   "workers": {
-    // Owns the public URL and serves the frontend. Proxies /api and /blueprint-screenshot to the
-    // Workshop, and /gatekeeper/<name> to the matching Gatekeeper.
     "router": {
-      "name": "<ROUTER_WORKER_NAME>",
+      "name": "knox-os",
 
-      // Production: use a hostname in an active Cloudflare zone. Wrangler creates DNS and TLS.
-      // Evaluation: replace this with "route": { "workersDev": true } and set publicBaseUrl above.
-      // https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
-      "route": { "customDomain": "os.example.com" }
+      // Verified free 2026-08-25: zone knoxi.dev is active in this account, no existing DNS
+      // record or Worker custom domain for this hostname.
+      "route": { "customDomain": "os.knoxi.dev" }
     },
 
-    // The Workshop backend. No public route: the router reaches it over a service binding.
-    "workshop": { "name": "<WORKSHOP_WORKER_NAME>" },
-    "context": { "name": "<CONTEXT_WORKER_NAME>" },
-
-    // The Scheduler Gatekeeper, which gives agents scheduled and recurring work. Ambient like
-    // the Context Gatekeeper
-    "scheduler": { "name": "<SCHEDULER_WORKER_NAME>" },
-
-    "customGatekeeper": { "name": "<CUSTOM_GATEKEEPER_WORKER_NAME>" },
-    "errorReporter": { "name": "<ERROR_REPORTER_WORKER_NAME>" }
+    "workshop": { "name": "knox-os-workshop" },
+    "context": { "name": "knox-os-context" },
+    "scheduler": { "name": "knox-os-scheduler" },
+    "customGatekeeper": { "name": "knox-os-gatekeeper" },
+    "errorReporter": { "name": "knox-os-error-reporter" }
   },
 
-  // This starter deploys Cloudflare Access mode. Cloudflare OS also supports built-in password
-  // accounts and auth Gatekeeper sign-in; see the reference below before switching. The audience
-  // comes from the self-hosted Access application protecting the public hostname.
-  // "admins" gates /admin in every sign-in method.
-  // Reference: docs/customization.md#sign-in-methods
+  // From the self-hosted Access application protecting the router hostname. Create it before
+  // deploying, then copy the team domain and the application audience tag.
+  // https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/#get-your-aud-tag
   "access": {
-    "issuer": "https://<TEAM_NAME>.cloudflareaccess.com",
-    "audience": "<ACCESS_AUDIENCE>",
-    "admins": ["<ADMIN_EMAIL>"]
+    "issuer": "https://knoxgrammar.cloudflareaccess.com",
+    "audience": "8623541e237ab1d2eee15a213ba7539c45e20f9e8f922c62aa6f78571c9fad6a",
+    "admins": ["carrickm@knox.nsw.edu.au"]
   },
 
-  // Model catalog served through Cloudflare AI Gateway. Enabled by default: the Workshop reaches
-  // the gateway over its WORKERS_AI binding, which is pre-authenticated inside your own account,
-  // so no API token is needed.
-  // Reference: docs/customization.md#ai-models
+  // Workers AI through the account's own AI Gateway. Reached over the Workshop's WORKERS_AI
+  // binding, which is pre-authenticated in-account, so no CF_AI_GATEWAY_API_TOKEN is needed.
   "aiGateway": {
     "enabled": true,
-
-    // Your account's AI Gateway. "default" is the one Cloudflare creates for the account.
-    // Migrating from the hosted deploy? Use the gateway that flow created: "<instance>-ai"
-    // (e.g. "cloudflareos-ai"), named after your instance. See docs/migrate-from-hosted.md.
     "name": "default",
-
-    // null reuses the top-level accountId. Set only if the gateway lives in another account --
-    // that requires CF_AI_GATEWAY_API_TOKEN, since the binding cannot reach across accounts.
     "accountId": null,
-
-    // "cloudflare" is Workers AI, which needs no key of your own. anthropic/openai need keys
-    // stored on the gateway; "google" additionally requires CF_AI_GATEWAY_API_TOKEN.
     "providers": ["cloudflare"]
   },
 
   "context": {
-    // Isolates Context data shared by this Workshop deployment.
-    // null scopes it to the public origin
+    // null scopes Context data to the public origin. Changing the hostname later moves this
+    // boundary and hides existing collections, so pin it to a literal once data exists.
     "sharingDomain": null,
 
-    // null: Wrangler provisions and remembers a KV namespace on first deploy.
-    // string: bind an existing namespace by ID.
     "kvNamespaceId": null
-
-    // Optional Git-compatible storage for Context collections. To enable it, add a comma after
-    // kvNamespaceId and uncomment this object. Requires Artifacts account access.
-    // "artifacts": {
-    //   "enabled": true,
-    //   // Optional override; defaults to "gatekeeper-context-collections".
-    //   "namespace": "custom-context-collections"
-    // }
   },
 
-  // Displayed to agents when the example custom integration is enabled in /admin.
-  // Reference: docs/customization.md#custom-gatekeepers
   "customGatekeeper": {
-    "name": "<ORGANIZATION_DISPLAY_NAME>",
-    "message": "<ORGANIZATION_GUIDANCE>"
+    "name": "Knox Grammar School",
+    "message": "Read-only deployment information for the Knox OS instance. Ask about the deployment environment and configured integrations."
   },
 
-  // Explicit backend issue reports go to a private Worker that emits structured console errors.
-  // Set release to a commit/version when your deployment pipeline has one.
-  // Reference: docs/observability.md#quick-start
   "errorReporting": {
     "enabled": true,
     "environment": "production",
     "release": null
   },
 
-  // null values use Wrangler automatic provisioning. Set IDs/names to reuse owned resources.
-  // https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning
+  // null lets Wrangler provision and remember these on first deploy.
   "resources": {
     "blueprintsKvNamespaceId": null,
     "avatarsKvNamespaceId": null,
     "blueprintContentBucket": null
   },
 
-  // Structured custom logs stay enabled. Invocation logs and traces are separate volume controls.
-  // https://developers.cloudflare.com/workers/observability/logs/workers-logs/
   "observability": {
     "enabled": true,
     "headSamplingRate": 1,
