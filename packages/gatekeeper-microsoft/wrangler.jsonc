@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "gatekeeper-microsoft",
+  "main": ".wrangler/validate/src/microsoft.ts",
+  "build": {
+    "command": "pnpm exec capnweb-validate build --out .wrangler/validate",
+    "watch_dir": "src"
+  },
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["allow_irrevocable_stub_storage", "nodejs_compat"],
+
+  // types.txt is a symlink to types.d.ts, imported as a text module so getTypeScriptTypes()
+  // can return the agent-facing API documentation at runtime.
+  "rules": [
+    { "type": "Text", "globs": ["**/*.txt", "**/*.svg"], "fallthrough": false }
+  ],
+
+  // One tag per class added. Never edit an existing tag: renaming or removing a class from a
+  // shipped tag strands its Durable Object storage.
+  "migrations": [
+    {
+      "tag": "v0",
+      "new_sqlite_classes": [
+        "UserAccount",
+        "OutlookMailGatekeeperImpl",
+        "OutlookCalendarGatekeeperImpl"
+      ]
+    }
+  ],
+
+  // Pinned to the Knox tenant: blocks sign-in from any other Microsoft tenant outright.
+  // TENANT_ID is not a secret. CLIENT_ID and CLIENT_SECRET are, and are installed with
+  // `wrangler secret put` against this Worker -- never written here or in deployment.jsonc.
+  "vars": {
+    "TENANT_ID": "3b951541-2eca-412c-9d5f-ffb43008c700"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
+}
