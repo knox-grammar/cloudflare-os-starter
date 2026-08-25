@@ -292,6 +292,12 @@ export class MailApi {
     return result.value.map(f => f.displayName);
   }
 
+  async getOwnerAddress(): Promise<string> {
+    let result = await this.#request<{ mail?: string; userPrincipalName?: string }>(
+        "/me?$select=mail,userPrincipalName");
+    return result.mail ?? result.userPrincipalName ?? "";
+  }
+
   /**
    * One page of messages, most recently received first.
    *

@@ -175,6 +175,80 @@ function grantedResourcesFromScopes(grantedOAuthScopes: string[]): string[] {
 const MICROSOFT_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(MICROSOFT_LOGO_SVG)}`;
 
 // ===========================================================================================
+// Approval-queue helpers, shared by both resource gatekeepers.
+//
+// Approval model (see write-gatekeeper SKILL.md "Logging and approvals"): every read calls
+// authorizeObservation() before returning data; every side-effecting write is stored via
+// submitAction() and not actually performed until the overseer calls applyAction(). Neither
+// gatekeeper simulates pending actions (reads do not reflect an unapplied archive/draft/event
+// change) -- gatekeeper-google's own Gmail actions make the same choice for the same reason:
+// simulation is optional per the SKILL, and these actions don't need it enough to justify the
+// complexity. Revisit if that proves confusing in practice.
+// ===========================================================================================
+
+function sanitizeApprovalTitle(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").slice(0, 200);
+}
+
+function formatApprovalField(label: string, value: string): string {
+  // Use a fence longer than any backtick run in the value, so untrusted email/event fields
+  // render verbatim and cannot forge surrounding approval Markdown.
+  let fence = "```";
+  while (value.includes(fence)) fence += "`";
+  return `**${label}:**\n\n${fence}\n${value}\n${fence}`;
+}
+
+/** Ported unchanged from gatekeeper-google -- generic pending-action ledger keyed by DO storage. */
+class PendingActionStore<Action> {
+  #kv: DurableObjectStorage["kv"];
+
+  constructor(kv: DurableObjectStorage["kv"]) {
+    this.#kv = kv;
+  }
+
+  #actionKey(id: number): string {
+    return `pending:action:${id}`;
+  }
+
+  submit(action: Action): number {
+    let id = this.#kv.get<number>("pending:nextActionId") ?? 1;
+    this.#kv.put("pending:nextActionId", id + 1);
+    this.#kv.put(this.#actionKey(id), action);
+    return id;
+  }
+
+  get(id: number): Action | undefined {
+    return this.#kv.get<Action>(this.#actionKey(id));
+  }
+
+  list(): { id: number; action: Action }[] {
+    return [...this.#kv.list<Action>({ prefix: "pending:action:" })]
+        .map(([key, action]) => ({ id: Number(key.slice("pending:action:".length)), action }))
+        .filter(({ id }) => Number.isFinite(id))
+        .toSorted((a, b) => a.id - b.id);
+  }
+
+  remove(id: number): void {
+    this.#kv.delete(this.#actionKey(id));
+  }
+}
+
+async function submitAction<Action>(
+    pendingActions: PendingActionStore<Action>, approvalQueue: RpcStub<ApprovalQueue>,
+    action: Action, desc: { title: string; description: string }): Promise<void> {
+  if (pendingActions.list().length >= 100) {
+    throw new Error("Too many pending actions. Resolve existing actions before adding more.");
+  }
+  let actionId = pendingActions.submit(action);
+  try {
+    await approvalQueue.submitAction(actionId, { ...desc, implementsRevert: false });
+  } catch (err) {
+    pendingActions.remove(actionId);
+    throw err;
+  }
+}
+
+// ===========================================================================================
 // HTTP handler -- OAuth initiation and completion.
 // ===========================================================================================
 
@@ -694,14 +768,28 @@ function graphMessageToMailMessage(m: GraphMessage, attachments: { id: string; f
   };
 }
 
-class MailThreadImpl extends RpcTarget implements MailThread {
-  #mailApi: MailApi;
-  #conversationId: string;
-  #messages: GraphMessage[]; // ascending by receivedDateTime
+type OutlookMailAction =
+  | { type: "archive" | "delete" | "markRead" | "markUnread"; conversationId: string }
+  | { type: "moveTo"; conversationId: string; folder: string }
+  | { type: "createDraft"; to: string[]; cc: string[]; subject: string; body: string }
+  | { type: "draftReply"; conversationId: string; body: string; replyAll: boolean }
+  | { type: "draftForward"; conversationId: string; to: string[]; body: string };
 
-  constructor(mailApi: MailApi, conversationId: string, messages: GraphMessage[]) {
+type OutlookMailSessionContext = {
+  mailApi: MailApi;
+  approvalQueue: RpcStub<ApprovalQueue>;
+  pendingActions: PendingActionStore<OutlookMailAction>;
+  folderId: string | undefined;
+};
+
+class MailThreadImpl extends RpcTarget implements MailThread {
+  #ctx: OutlookMailSessionContext;
+  #conversationId: string;
+  #messages: GraphMessage[]; // ascending by receivedDateTime, bodies already fetched
+
+  constructor(ctx: OutlookMailSessionContext, conversationId: string, messages: GraphMessage[]) {
     super();
-    this.#mailApi = mailApi;
+    this.#ctx = ctx;
     this.#conversationId = conversationId;
     this.#messages = messages;
   }
@@ -712,6 +800,10 @@ class MailThreadImpl extends RpcTarget implements MailThread {
     return last;
   }
 
+  #subject(): string {
+    return this.#mostRecent().subject || "(no subject)";
+  }
+
   async summary(): Promise<MailThreadSummary> {
     let latest = this.#mostRecent();
     let summary = graphMessageToSummary(latest);
@@ -719,13 +811,16 @@ class MailThreadImpl extends RpcTarget implements MailThread {
     summary.messageCount = this.#messages.length;
     summary.hasUnread = this.#messages.some(m => !m.isRead);
     summary.hasAttachments = this.#messages.some(m => m.hasAttachments);
+    // No separate authorization here: getThread() already authorized the full read of every
+    // message in this conversation (bodies included), and this method only exposes a subset of
+    // that same already-authorized data.
     return summary;
   }
 
   async messages(): Promise<MailMessage[]> {
     let capped = this.#messages.slice(-100);
     return Promise.all(capped.map(async m => {
-      let attachments = m.hasAttachments ? await this.#mailApi.listAttachments(m.id) : [];
+      let attachments = m.hasAttachments ? await this.#ctx.mailApi.listAttachments(m.id) : [];
       return graphMessageToMailMessage(
           m, attachments.map(a => ({ id: a.id, filename: a.name, contentType: a.contentType, size: a.size })));
     }));
@@ -735,41 +830,80 @@ class MailThreadImpl extends RpcTarget implements MailThread {
     if (!this.#messages.some(m => m.id === messageId)) {
       throw new Error(`Message not in this conversation: ${messageId}`);
     }
-    return this.#mailApi.getAttachmentBytes(messageId, attachmentId);
+    let bytes = await this.#ctx.mailApi.getAttachmentBytes(messageId, attachmentId);
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: sanitizeApprovalTitle(`Download attachment: ${this.#subject()}`),
+      description: `Download attachment ${attachmentId} from message ${messageId}.`,
+    });
+    return bytes;
+  }
+
+  async #submitThreadAction(
+      type: "archive" | "delete" | "markRead" | "markUnread", titlePrefix: string, intro: string)
+      : Promise<void> {
+    let subject = this.#subject();
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type, conversationId: this.#conversationId },
+        {
+          title: sanitizeApprovalTitle(`${titlePrefix}: ${subject}`),
+          description: `${intro}\n\n${formatApprovalField("Subject", subject)}`,
+        });
   }
 
   async archive(): Promise<void> {
-    await this.#mailApi.moveConversation(this.#conversationId, "archive");
+    await this.#submitThreadAction("archive", "Archive", "Move this conversation to the Archive folder.");
   }
 
   async delete(): Promise<void> {
-    await this.#mailApi.deleteConversation(this.#conversationId);
+    await this.#submitThreadAction("delete", "Delete", "Move this conversation to Deleted Items.");
   }
 
   async markRead(): Promise<void> {
-    await this.#mailApi.setConversationRead(this.#conversationId, true);
+    await this.#submitThreadAction("markRead", "Mark read", "Mark every message in this conversation as read.");
   }
 
   async markUnread(): Promise<void> {
-    await this.#mailApi.setConversationRead(this.#conversationId, false);
+    await this.#submitThreadAction("markUnread", "Mark unread", "Mark every message in this conversation as unread.");
   }
 
   async moveTo(folder: string): Promise<void> {
-    await this.#mailApi.moveConversation(this.#conversationId, folder);
+    let subject = this.#subject();
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "moveTo", conversationId: this.#conversationId, folder },
+        {
+          title: sanitizeApprovalTitle(`Move to ${folder}: ${subject}`),
+          description: `Move this conversation to the "${folder}" folder.\n\n` +
+              formatApprovalField("Subject", subject),
+        });
   }
 
   async draftReply(body: string, replyAll?: boolean): Promise<void> {
-    await this.#mailApi.draftReply(this.#mostRecent().id, markdownToHtml(body), replyAll ?? false);
+    let subject = this.#subject();
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "draftReply", conversationId: this.#conversationId, body, replyAll: replyAll ?? false },
+        {
+          title: sanitizeApprovalTitle(`Draft reply: ${subject}`),
+          description: `Create a draft reply${replyAll ? " to all recipients" : ""} in the Drafts ` +
+              "folder. It is not sent automatically.\n\n" +
+              formatApprovalField("Subject", subject) + "\n\n" + formatApprovalField("Body", body),
+        });
   }
 
   async draftForward(to: string[], body?: string): Promise<void> {
-    await this.#mailApi.draftForward(this.#mostRecent().id, to, markdownToHtml(body ?? ""));
+    let subject = this.#subject();
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "draftForward", conversationId: this.#conversationId, to, body: body ?? "" },
+        {
+          title: sanitizeApprovalTitle(`Draft forward: ${subject}`),
+          description: "Create a draft forward in the Drafts folder. It is not sent automatically.\n\n" +
+              formatApprovalField("Subject", subject) + "\n\n" + formatApprovalField("To", to.join(", ")) +
+              (body ? "\n\n" + formatApprovalField("Note", body) : ""),
+        });
   }
 }
 
 class MailThreadCursor extends RpcTarget implements Cursor<MailThreadSummary> {
-  #mailApi: MailApi;
-  #folderId: string | undefined;
+  #ctx: OutlookMailSessionContext;
   #unreadOnly: boolean | undefined;
   #query: string | undefined;
   #nextLink: string | undefined;
@@ -777,10 +911,9 @@ class MailThreadCursor extends RpcTarget implements Cursor<MailThreadSummary> {
   #seen = new Set<string>();
   #started = false;
 
-  constructor(mailApi: MailApi, options: { folderId?: string; unreadOnly?: boolean; query?: string }) {
+  constructor(ctx: OutlookMailSessionContext, options: { unreadOnly?: boolean; query?: string }) {
     super();
-    this.#mailApi = mailApi;
-    this.#folderId = options.folderId;
+    this.#ctx = ctx;
     this.#unreadOnly = options.unreadOnly;
     this.#query = options.query;
   }
@@ -788,8 +921,8 @@ class MailThreadCursor extends RpcTarget implements Cursor<MailThreadSummary> {
   async next(): Promise<MailThreadSummary[] | null> {
     if (this.#done && this.#started) return null;
     this.#started = true;
-    let page = await this.#mailApi.listMessagesPage({
-      folderId: this.#folderId, unreadOnly: this.#unreadOnly, query: this.#query,
+    let page = await this.#ctx.mailApi.listMessagesPage({
+      folderId: this.#ctx.folderId, unreadOnly: this.#unreadOnly, query: this.#query,
       top: 50, nextLink: this.#nextLink,
     });
     this.#nextLink = page.nextLink;
@@ -801,60 +934,93 @@ class MailThreadCursor extends RpcTarget implements Cursor<MailThreadSummary> {
       this.#seen.add(m.conversationId);
       summaries.push(graphMessageToSummary(m));
     }
+
+    if (summaries.length > 0) {
+      await this.#ctx.approvalQueue.authorizeObservation({
+        title: `Read ${summaries.length} Outlook conversation(s)`,
+        description: "Fetch the next page of conversation summaries from the mailbox.\n\n" +
+            formatApprovalField("Subjects", summaries.map(s => s.subject).join("\n")),
+      });
+    }
     return summaries;
   }
 }
 
 class OutlookMailSessionImpl extends RpcTarget implements OutlookMailSession {
-  #approvalQueue: RpcStub<ApprovalQueue>;
-  #mailApi: MailApi;
-  #folderId: string | undefined;
+  #ctx: OutlookMailSessionContext;
   #ownerAddress: Promise<string> | undefined;
 
-  constructor(approvalQueue: RpcStub<ApprovalQueue>, mailApi: MailApi, folderId: string | undefined) {
+  constructor(ctx: OutlookMailSessionContext) {
     super();
-    this.#approvalQueue = approvalQueue;
-    this.#mailApi = mailApi;
-    this.#folderId = folderId;
+    this.#ctx = ctx;
   }
 
   [Symbol.dispose]() {
-    this.#approvalQueue[Symbol.dispose]();
+    this.#ctx.approvalQueue[Symbol.dispose]();
   }
 
   async address(): Promise<string> {
-    // TODO(Phase 2): this is an observation and should route through
-    // this.#approvalQueue.authorizeObservation() once the approval queue is wired up.
     if (!this.#ownerAddress) {
-      this.#ownerAddress = this.#mailApi.listFolders().then(() => "").catch(() => "");
+      this.#ownerAddress = (async () => {
+        let address = await this.#ctx.mailApi.getOwnerAddress();
+        await this.#ctx.approvalQueue.authorizeObservation({
+          title: "Read mailbox owner address",
+          description: "Read the signed-in mailbox owner's email address.",
+        });
+        return address;
+      })();
     }
     return this.#ownerAddress;
   }
 
   async list(options?: { folder?: string; unreadOnly?: boolean; query?: string })
       : Promise<Cursor<MailThreadSummary>> {
-    let folderId = this.#folderId ?? (options?.folder ? await this.#mailApi.resolveFolderId(options.folder) : undefined);
-    return new RpcStub(new MailThreadCursor(this.#mailApi, {
-      folderId, unreadOnly: options?.unreadOnly, query: options?.query,
+    let folderId = this.#ctx.folderId
+        ?? (options?.folder ? await this.#ctx.mailApi.resolveFolderId(options.folder) : undefined);
+    let cursorCtx: OutlookMailSessionContext = { ...this.#ctx, folderId };
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: "List Outlook conversations",
+      description: "Create a cursor for conversations in the mailbox" +
+          (options?.folder ? ` (folder: ${options.folder})` : "") +
+          (options?.query ? `\n\n${formatApprovalField("Search", options.query)}` : ""),
+    });
+    return new RpcStub(new MailThreadCursor(cursorCtx, {
+      unreadOnly: options?.unreadOnly, query: options?.query,
     })) as unknown as Cursor<MailThreadSummary>;
   }
 
   async getThread(id: string): Promise<MailThread> {
-    let messages = await this.#mailApi.getMessagesByConversation(id);
-    if (this.#folderId && !messages.some(m => m.parentFolderId === this.#folderId)) {
+    let messages = await this.#ctx.mailApi.getMessagesByConversation(id);
+    if (this.#ctx.folderId && !messages.some(m => m.parentFolderId === this.#ctx.folderId)) {
       throw new Error(`Conversation not found in this mailbox binding's scope: ${id}`);
     }
-    return new RpcStub(new MailThreadImpl(this.#mailApi, id, messages)) as unknown as MailThread;
+    let latest = messages[messages.length - 1];
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: sanitizeApprovalTitle(`Open conversation: ${latest?.subject || "(no subject)"}`),
+      description: `Read ${messages.length} message(s) in this conversation, including bodies.`,
+    });
+    return new RpcStub(new MailThreadImpl(this.#ctx, id, messages)) as unknown as MailThread;
   }
 
   async listFolders(): Promise<string[]> {
-    return this.#mailApi.listFolders();
+    let folders = await this.#ctx.mailApi.listFolders();
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: "List mail folders",
+      description: "List the folder names in this mailbox.",
+    });
+    return folders;
   }
 
   async createDraft(message: DraftMail): Promise<void> {
-    await this.#mailApi.createDraft({
-      to: message.to, cc: message.cc, subject: message.subject, bodyHtml: markdownToHtml(message.body),
-    });
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "createDraft", to: message.to, cc: message.cc ?? [], subject: message.subject, body: message.body },
+        {
+          title: sanitizeApprovalTitle(`Draft: ${message.subject}`),
+          description: "Create a new draft in the Drafts folder. It is not sent automatically.\n\n" +
+              formatApprovalField("To", message.to.join(", ")) + "\n\n" +
+              formatApprovalField("Subject", message.subject) + "\n\n" +
+              formatApprovalField("Body", message.body),
+        });
   }
 }
 
@@ -901,18 +1067,70 @@ export class OutlookMailGatekeeperImpl extends DurableObject<Env, OutlookMailGat
   async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<OutlookMailSession> {
     let mailApi = this.#mailApi();
     let folderId = this.ctx.props.folder ? await mailApi.resolveFolderId(this.ctx.props.folder) : undefined;
-    return new OutlookMailSessionImpl(approvalQueue.dup(), mailApi, folderId);
+    let ctx: OutlookMailSessionContext = {
+      mailApi, folderId, approvalQueue: approvalQueue.dup(),
+      pendingActions: new PendingActionStore<OutlookMailAction>(this.ctx.storage.kv),
+    };
+    return new OutlookMailSessionImpl(ctx);
   }
 
-  // Phase 1 executes reads and writes directly (see plans/gatekeeper-microsoft.md); nothing is
-  // ever submitted to the approval queue yet, so these are unreachable until Phase 2 wires
-  // submitAction()/applyAction() through the session methods above.
   async applyAction(actionId: number): Promise<void> {
-    throw new Error(`Unknown action: ${actionId}`);
+    let pendingActions = new PendingActionStore<OutlookMailAction>(this.ctx.storage.kv);
+    let action = pendingActions.get(actionId);
+    if (!action) throw new Error(`Unknown pending Outlook Mail action: ${actionId}`);
+
+    let mailApi = this.#mailApi();
+    switch (action.type) {
+      case "archive":
+        await mailApi.moveConversation(action.conversationId, "archive");
+        break;
+      case "delete":
+        await mailApi.deleteConversation(action.conversationId);
+        break;
+      case "markRead":
+        await mailApi.setConversationRead(action.conversationId, true);
+        break;
+      case "markUnread":
+        await mailApi.setConversationRead(action.conversationId, false);
+        break;
+      case "moveTo":
+        await mailApi.moveConversation(action.conversationId, action.folder);
+        break;
+      case "createDraft":
+        await mailApi.createDraft({
+          to: action.to, cc: action.cc, subject: action.subject, bodyHtml: markdownToHtml(action.body),
+        });
+        break;
+      case "draftReply": {
+        // Refetch at apply time rather than trusting a message id captured at submit time: the
+        // conversation's most recent message may have changed while the action awaited approval.
+        let messages = await mailApi.getMessagesByConversation(action.conversationId);
+        let mostRecent = messages[messages.length - 1];
+        if (!mostRecent) throw new Error("Conversation no longer has any messages.");
+        await mailApi.draftReply(mostRecent.id, markdownToHtml(action.body), action.replyAll);
+        break;
+      }
+      case "draftForward": {
+        let messages = await mailApi.getMessagesByConversation(action.conversationId);
+        let mostRecent = messages[messages.length - 1];
+        if (!mostRecent) throw new Error("Conversation no longer has any messages.");
+        await mailApi.draftForward(mostRecent.id, action.to, markdownToHtml(action.body));
+        break;
+      }
+      default:
+        action satisfies never;
+        throw new Error(`unknown action type: ${(action as { type: string }).type}`);
+    }
+
+    pendingActions.remove(actionId);
   }
 
   async rejectAction(actionId: number): Promise<void | { restart?: boolean }> {
-    throw new Error(`Unknown action: ${actionId}`);
+    let pendingActions = new PendingActionStore<OutlookMailAction>(this.ctx.storage.kv);
+    if (!pendingActions.get(actionId)) {
+      throw new Error(`Unknown pending Outlook Mail action: ${actionId}`);
+    }
+    pendingActions.remove(actionId);
   }
 
   revertAction(_action: number):
@@ -966,12 +1184,27 @@ function graphEventToCalendarEvent(e: GraphEvent): CalendarEvent {
   };
 }
 
+type OutlookCalendarAction =
+  | { type: "createEvent"; event: NewCalendarEvent }
+  | { type: "updateEvent"; id: string; changes: CalendarEventUpdate }
+  | { type: "deleteEvent"; id: string }
+  | { type: "respondToEvent"; id: string; response: "accept" | "decline" | "tentative" };
+
+type OutlookCalendarSessionContext = {
+  calendarApi: CalendarApi;
+  approvalQueue: RpcStub<ApprovalQueue>;
+  pendingActions: PendingActionStore<OutlookCalendarAction>;
+  calendarId: string;
+};
+
 class CalendarEventCursor extends RpcTarget implements Cursor<CalendarEvent> {
+  #ctx: OutlookCalendarSessionContext;
   #events: GraphEvent[];
   #delivered = false;
 
-  constructor(events: GraphEvent[]) {
+  constructor(ctx: OutlookCalendarSessionContext, events: GraphEvent[]) {
     super();
+    this.#ctx = ctx;
     this.#events = events;
   }
 
@@ -982,46 +1215,62 @@ class CalendarEventCursor extends RpcTarget implements Cursor<CalendarEvent> {
   async next(): Promise<CalendarEvent[] | null> {
     if (this.#delivered) return null;
     this.#delivered = true;
-    return this.#events.map(graphEventToCalendarEvent);
+    let events = this.#events.map(graphEventToCalendarEvent);
+    if (events.length > 0) {
+      await this.#ctx.approvalQueue.authorizeObservation({
+        title: `Read ${events.length} calendar event(s)`,
+        description: "Fetch events overlapping the requested date range.\n\n" +
+            formatApprovalField("Subjects", events.map(e => e.subject).join("\n")),
+      });
+    }
+    return events;
   }
 }
 
 class OutlookCalendarSessionImpl extends RpcTarget implements OutlookCalendarSession {
-  #approvalQueue: RpcStub<ApprovalQueue>;
-  #calendarApi: CalendarApi;
-  #calendarId: string;
+  #ctx: OutlookCalendarSessionContext;
 
-  constructor(approvalQueue: RpcStub<ApprovalQueue>, calendarApi: CalendarApi, calendarId: string) {
+  constructor(ctx: OutlookCalendarSessionContext) {
     super();
-    this.#approvalQueue = approvalQueue;
-    this.#calendarApi = calendarApi;
-    this.#calendarId = calendarId;
+    this.#ctx = ctx;
   }
 
   [Symbol.dispose]() {
-    this.#approvalQueue[Symbol.dispose]();
+    this.#ctx.approvalQueue[Symbol.dispose]();
   }
 
   async name(): Promise<string> {
-    return this.#calendarApi.getCalendarName(this.#calendarId);
+    let name = await this.#ctx.calendarApi.getCalendarName(this.#ctx.calendarId);
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: "Read calendar name", description: "Read this calendar's display name.",
+    });
+    return name;
   }
 
   async address(): Promise<string> {
-    return this.#calendarApi.getOwnerAddress();
+    let address = await this.#ctx.calendarApi.getOwnerAddress();
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: "Read calendar owner address", description: "Read the signed-in calendar owner's email address.",
+    });
+    return address;
   }
 
   async list(from: Date, to: Date): Promise<Cursor<CalendarEvent>> {
-    let events = await this.#calendarApi.listEvents(this.#calendarId, from, to);
-    return new RpcStub(new CalendarEventCursor(events)) as unknown as Cursor<CalendarEvent>;
+    let events = await this.#ctx.calendarApi.listEvents(this.#ctx.calendarId, from, to);
+    return new RpcStub(new CalendarEventCursor(this.#ctx, events)) as unknown as Cursor<CalendarEvent>;
   }
 
   async getEvent(id: string): Promise<CalendarEvent> {
-    let event = await this.#calendarApi.getEvent(this.#calendarId, id);
+    let event = await this.#ctx.calendarApi.getEvent(this.#ctx.calendarId, id);
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: sanitizeApprovalTitle(`Read event: ${event.subject || "(no subject)"}`),
+      description: `Read details for calendar event ${id}.`,
+    });
     return graphEventToCalendarEvent(event);
   }
 
   async findFreeTime(from: Date, to: Date, minimumMinutes: number): Promise<FreeSlot[]> {
-    let events = await this.#calendarApi.listEvents(this.#calendarId, from, to);
+    let events = await this.#ctx.calendarApi.listEvents(this.#ctx.calendarId, from, to);
     let busy = events
         .filter(e => e.showAs !== "free")
         .map(e => ({ start: new Date(e.start.dateTime + "Z"), end: new Date(e.end.dateTime + "Z") }))
@@ -1039,32 +1288,54 @@ class OutlookCalendarSessionImpl extends RpcTarget implements OutlookCalendarSes
     if (to.valueOf() - cursor.valueOf() >= minimumMs) {
       slots.push({ start: cursor, end: to });
     }
+
+    await this.#ctx.approvalQueue.authorizeObservation({
+      title: `Find free time (${slots.length} slot(s))`,
+      description: `Scan busy events between ${from.toISOString()} and ${to.toISOString()} for gaps ` +
+          `of at least ${minimumMinutes} minutes.`,
+    });
     return slots;
   }
 
   async createEvent(event: NewCalendarEvent): Promise<void> {
-    await this.#calendarApi.createEvent(this.#calendarId, {
-      subject: event.subject, start: event.start, end: event.end,
-      bodyHtml: event.body ? markdownToHtml(event.body) : undefined,
-      location: event.location, attendees: event.attendees, allDay: event.allDay,
-    });
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "createEvent", event },
+        {
+          title: sanitizeApprovalTitle(`Create event: ${event.subject}`),
+          description: "Create a new calendar event" +
+              ((event.attendees?.length ?? 0) > 0 ? ", sending invitations to its attendees" : "") +
+              ".\n\n" + formatApprovalField("Subject", event.subject) + "\n\n" +
+              formatApprovalField("When", `${event.start.toISOString()} \u2013 ${event.end.toISOString()}`) +
+              (event.attendees?.length ? `\n\n${formatApprovalField("Attendees", event.attendees.join(", "))}` : ""),
+        });
   }
 
   async updateEvent(id: string, changes: CalendarEventUpdate): Promise<void> {
-    await this.#calendarApi.updateEvent(this.#calendarId, id, {
-      subject: changes.subject, start: changes.start, end: changes.end,
-      bodyHtml: changes.body !== undefined ? markdownToHtml(changes.body) : undefined,
-      location: changes.location,
-    });
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "updateEvent", id, changes },
+        {
+          title: sanitizeApprovalTitle(`Update event: ${changes.subject ?? id}`),
+          description: `Update calendar event ${id}. Attendees are notified of time or subject changes.\n\n` +
+              formatApprovalField("Changes", JSON.stringify(changes, null, 2)),
+        });
   }
 
   async deleteEvent(id: string): Promise<void> {
-    await this.#calendarApi.deleteEvent(this.#calendarId, id);
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "deleteEvent", id },
+        {
+          title: sanitizeApprovalTitle(`Cancel event ${id}`),
+          description: `Cancel calendar event ${id}. Attendees are notified.`,
+        });
   }
 
   async respondToEvent(id: string, response: "accept" | "decline" | "tentative"): Promise<void> {
-    await this.#calendarApi.respondToEvent(
-        this.#calendarId, id, response === "tentative" ? "tentativelyAccept" : response);
+    await submitAction(this.#ctx.pendingActions, this.#ctx.approvalQueue,
+        { type: "respondToEvent", id, response },
+        {
+          title: sanitizeApprovalTitle(`Respond ${response} to event ${id}`),
+          description: `Respond "${response}" to the invitation for calendar event ${id}.`,
+        });
   }
 }
 
@@ -1102,17 +1373,57 @@ export class OutlookCalendarGatekeeperImpl
   }
 
   async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<OutlookCalendarSession> {
-    return new OutlookCalendarSessionImpl(approvalQueue.dup(), this.#calendarApi(), this.ctx.props.calendarId);
+    let ctx: OutlookCalendarSessionContext = {
+      calendarApi: this.#calendarApi(), calendarId: this.ctx.props.calendarId,
+      approvalQueue: approvalQueue.dup(),
+      pendingActions: new PendingActionStore<OutlookCalendarAction>(this.ctx.storage.kv),
+    };
+    return new OutlookCalendarSessionImpl(ctx);
   }
 
-  // See the matching note on OutlookMailGatekeeperImpl -- Phase 1 executes directly, so these are
-  // unreachable until Phase 2.
   async applyAction(actionId: number): Promise<void> {
-    throw new Error(`Unknown action: ${actionId}`);
+    let pendingActions = new PendingActionStore<OutlookCalendarAction>(this.ctx.storage.kv);
+    let action = pendingActions.get(actionId);
+    if (!action) throw new Error(`Unknown pending Outlook Calendar action: ${actionId}`);
+
+    let calendarApi = this.#calendarApi();
+    switch (action.type) {
+      case "createEvent":
+        await calendarApi.createEvent(this.ctx.props.calendarId, {
+          subject: action.event.subject, start: action.event.start, end: action.event.end,
+          bodyHtml: action.event.body ? markdownToHtml(action.event.body) : undefined,
+          location: action.event.location, attendees: action.event.attendees, allDay: action.event.allDay,
+        });
+        break;
+      case "updateEvent":
+        await calendarApi.updateEvent(this.ctx.props.calendarId, action.id, {
+          subject: action.changes.subject, start: action.changes.start, end: action.changes.end,
+          bodyHtml: action.changes.body !== undefined ? markdownToHtml(action.changes.body) : undefined,
+          location: action.changes.location,
+        });
+        break;
+      case "deleteEvent":
+        await calendarApi.deleteEvent(this.ctx.props.calendarId, action.id);
+        break;
+      case "respondToEvent":
+        await calendarApi.respondToEvent(
+            this.ctx.props.calendarId, action.id,
+            action.response === "tentative" ? "tentativelyAccept" : action.response);
+        break;
+      default:
+        action satisfies never;
+        throw new Error(`unknown action type: ${(action as { type: string }).type}`);
+    }
+
+    pendingActions.remove(actionId);
   }
 
   async rejectAction(actionId: number): Promise<void | { restart?: boolean }> {
-    throw new Error(`Unknown action: ${actionId}`);
+    let pendingActions = new PendingActionStore<OutlookCalendarAction>(this.ctx.storage.kv);
+    if (!pendingActions.get(actionId)) {
+      throw new Error(`Unknown pending Outlook Calendar action: ${actionId}`);
+    }
+    pendingActions.remove(actionId);
   }
 
   revertAction(_action: number):
