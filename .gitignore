@@ -3,3 +3,8 @@ packages/*/dist/
 packages/*/.wrangler/
 packages/*/wrangler.prod.jsonc
 deployment.local.jsonc
+
+# Local bootstrap credentials for scripts/set-remote-secrets.ts. Transitional -- see
+# plans/gatekeeper-microsoft.md -- to be replaced by CI-provided env vars. Unlike a package's
+# .prod.env (deliberately designed to be shared/committed), this is a personal local file.
+scripts/.deploy.env

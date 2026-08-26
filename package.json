@@ -14,7 +14,8 @@
     "lint:fix": "vp lint --fix",
     "lint": "pnpm run lint:check && pnpm run types:scripts && pnpm run build",
     "check": "node scripts/deploy.ts --check",
-    "deploy": "node scripts/deploy.ts"
+    "deploy": "node scripts/deploy.ts",
+    "secrets:set": "CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad op run --env-file=./scripts/.deploy.env -- node scripts/set-remote-secrets.ts"
   },
   "devDependencies": {
     "@1password/sdk": "^0.5.0",
