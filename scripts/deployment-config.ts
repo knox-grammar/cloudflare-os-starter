@@ -112,6 +112,9 @@ export interface DeploymentConfig {
     context: { name: string };
     scheduler: { name: string };
     customGatekeeper: { name: string };
+    /** Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar). See
+     * packages/gatekeeper-microsoft/ and plans/gatekeeper-microsoft.md. */
+    gatekeeperMicrosoft: { name: string };
     /** Only required when `errorReporting.enabled`. */
     errorReporter?: { name: string };
   };
@@ -182,6 +185,7 @@ export interface GeneratedConfigs {
   context: ProdWranglerConfig;
   scheduler: ProdWranglerConfig;
   customGatekeeper: ProdWranglerConfig;
+  gatekeeperMicrosoft: ProdWranglerConfig;
   /** Absent when `errorReporting.enabled` is false. */
   errorReporter?: ProdWranglerConfig;
 }
@@ -193,6 +197,7 @@ export interface BaseConfigs {
   context: ProdWranglerConfig;
   scheduler: ProdWranglerConfig;
   customGatekeeper: ProdWranglerConfig;
+  gatekeeperMicrosoft: ProdWranglerConfig;
   errorReporter: ProdWranglerConfig;
 }
 

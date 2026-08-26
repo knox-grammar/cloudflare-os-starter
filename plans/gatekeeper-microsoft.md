@@ -279,6 +279,46 @@ exercised, and the approval-queue wiring has not been exercised against a real o
 either. That requires `CLIENT_ID`/`CLIENT_SECRET` and registration in `deployment.jsonc`,
 which is deliberately not done yet.
 
+## Wrapper integration (2026-08-25)
+
+Registered as a seventh Worker, following the "Wrapper-specific integration work" plan above:
+
+- `scripts/deployment-config.ts`: `workers.gatekeeperMicrosoft: { name: string }` added to
+  `DeploymentConfig`; `gatekeeperMicrosoft: ProdWranglerConfig` added to `GeneratedConfigs`
+  and `BaseConfigs`.
+- `scripts/deploy.ts`: `packageDirs.gatekeeperMicrosoft`, `workers.gatekeeperMicrosoft.name`
+  added to `requiredPaths`, a `GATEKEEPER_MICROSOFT` binding added to both the Router's
+  `services` (no entrypoint, forwards whole HTTP requests) and the Workshop's `services`
+  (`GatekeeperVendor` entrypoint), a `BASE_URL` var set to `${origin}/gatekeeper/microsoft`
+  (the OAuth redirect target the fetch handler needs and the only Worker of the seven that
+  needs one), a build step, and a deploy-order slot between the custom Gatekeeper and the
+  Workshop (which binds it) — `errorReporter, context, scheduler, customGatekeeper,
+  gatekeeperMicrosoft, workshop, router`.
+- `scripts/deploy.test.ts`: fixtures and the two assertions enumerating full binding arrays
+  (Workshop's `services`, Router's `services`) updated for the new entry.
+- `packages/gatekeeper-microsoft/vite.config.ts` / `package.json`: dropped the `test` task
+  and `test:run` script added in the earlier scaffold — `vitest run` was failing the whole
+  `pnpm check` with "No test files found" since no test files exist yet. Add both back once
+  real tests land.
+- `deployment.jsonc` (the **live knox-os** deployment config): added
+  `workers.gatekeeperMicrosoft.name: "knox-os-gatekeeper-microsoft"`, verified free in the
+  account before adding.
+
+**Verified with a full `pnpm check`** (not just the package's own `tsc`/dry-run as before):
+all 26 wrapper tests pass, every one of the now-seven Workers builds and dry-run deploys, and
+the generated bindings are correct — `knox-os-gatekeeper-microsoft` carries the right
+`TENANT_ID` and `BASE_URL` (`https://os.knoxi.dev/gatekeeper/microsoft`), the Workshop and
+Router both bind it correctly, and it has no public route or preview URL of its own, same as
+every other backend Worker.
+
+**What this does and doesn't mean:** `pnpm check` passing means the *next* `pnpm deploy` of
+knox-os would successfully deploy this Worker too — reachable at `/gatekeeper/microsoft`,
+functionally inert (no `CLIENT_ID`/`CLIENT_SECRET` installed, so the OAuth flow shows a
+"not configured" page, same posture as an unconfigured `gatekeeper-google` in the upstream
+submodule). It does **not** mean anyone approved that deploy actually happening. Treat adding
+it to a real `pnpm deploy` as its own decision, separate from this integration work, per the
+operator skill's production-mutation gate.
+
 ## Next steps
 
 1. Resource configurator UI (SKILL Step 6).
@@ -286,10 +326,12 @@ which is deliberately not done yet.
    simulation.
 3. Confirm the observer strategies (both currently A / always-throw) against real Graph
    behavior and real usage — particularly whether calendar sharing ever needs to move to B.
-4. Wrapper integration: register in `scripts/deploy.ts` and `deployment.jsonc`, following
-   "Wrapper-specific integration work" above.
-5. A real HTML↔Markdown converter and real per-user avatar fetch, if the first-pass versions
+4. A real HTML↔Markdown converter and real per-user avatar fetch, if the first-pass versions
    prove insufficient in testing.
+5. Provision an Azure App Registration (single-tenant, redirect URI
+   `https://os.knoxi.dev/gatekeeper/microsoft/oauth`), install `CLIENT_ID`/`CLIENT_SECRET`
+   with `wrangler secret put` against `knox-os-gatekeeper-microsoft`, and get explicit
+   approval before the first real `pnpm deploy` that includes this Worker.
 6. Manual end-to-end test against a real Knox Microsoft 365 account once `CLIENT_ID`/
    `CLIENT_SECRET` are provisioned (Azure App Registration, single-tenant, redirect URI
    `<PUBLIC_BASE_URL>/gatekeeper/microsoft/oauth`).

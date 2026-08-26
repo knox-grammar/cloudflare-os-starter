@@ -19,6 +19,7 @@ const validConfig: DeploymentConfig = {
     context: { name: "acme-cloudflare-os-context" },
     scheduler: { name: "acme-cloudflare-os-scheduler" },
     customGatekeeper: { name: "acme-cloudflare-os-custom" },
+    gatekeeperMicrosoft: { name: "acme-cloudflare-os-microsoft" },
     errorReporter: { name: "acme-cloudflare-os-errors" },
   },
   access: {
@@ -74,6 +75,7 @@ async function baseConfigs(): Promise<BaseConfigs> {
     context: await baseConfig("../cloudflare-os/packages/gatekeeper-context/wrangler.jsonc"),
     scheduler: await baseConfig("../cloudflare-os/packages/gatekeeper-scheduler/wrangler.jsonc"),
     customGatekeeper: await baseConfig("../packages/custom-gatekeeper/wrangler.jsonc"),
+    gatekeeperMicrosoft: await baseConfig("../packages/gatekeeper-microsoft/wrangler.jsonc"),
     errorReporter: await baseConfig("../packages/error-reporter/wrangler.jsonc"),
   };
 }
@@ -225,6 +227,11 @@ test("generates Access-mode Workshop, Context, and custom Gatekeeper configs", a
       service: "acme-cloudflare-os-custom",
       entrypoint: "GatekeeperVendor",
     },
+    {
+      binding: "GATEKEEPER_MICROSOFT",
+      service: "acme-cloudflare-os-microsoft",
+      entrypoint: "GatekeeperVendor",
+    },
   ]);
   assert.deepEqual(generated.workshop.kv_namespaces, [
     { binding: "BLUEPRINTS", id: "blueprints-kv-id" },
@@ -261,13 +268,14 @@ test("gives the router the public route, the frontend, and every service binding
   assert.equal(generated.router.name, "acme-cloudflare-os");
   assert.equal(generated.router.workers_dev, false);
   assert.deepEqual(generated.router.routes, [{ pattern: "os.example.com", custom_domain: true }]);
-  // No entrypoint on any of the three: the router forwards whole HTTP requests rather than making
+  // No entrypoint on any of the four: the router forwards whole HTTP requests rather than making
   // vendor RPC calls, and the binding name is what selects the /gatekeeper/<name> path.
   assert.deepEqual(generated.router.services, [
     { binding: "WORKSHOP_BACKEND", service: "acme-cloudflare-os-backend" },
     { binding: "GATEKEEPER_CONTEXT", service: "acme-cloudflare-os-context" },
     { binding: "GATEKEEPER_SCHEDULER", service: "acme-cloudflare-os-scheduler" },
     { binding: "GATEKEEPER_CUSTOM", service: "acme-cloudflare-os-custom" },
+    { binding: "GATEKEEPER_MICROSOFT", service: "acme-cloudflare-os-microsoft" },
   ]);
   // Inherited untouched: the base config already carries the ASSETS binding, the SPA fallback, and
   // the /gatekeeper/* prefix an OAuth Gatekeeper redirect needs.

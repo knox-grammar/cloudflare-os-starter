@@ -5,8 +5,7 @@
   "type": "module",
   "main": "./src/microsoft.ts",
   "scripts": {
-    "types:check": "tsc --noEmit",
-    "test:run": "vitest run"
+    "types:check": "tsc --noEmit"
   },
   "dependencies": {
     "@gadgets/workshop-shared": "workspace:*",

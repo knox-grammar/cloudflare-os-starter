@@ -25,6 +25,7 @@ const packageDirs = {
   context: "cloudflare-os/packages/gatekeeper-context",
   scheduler: "cloudflare-os/packages/gatekeeper-scheduler",
   customGatekeeper: "packages/custom-gatekeeper",
+  gatekeeperMicrosoft: "packages/gatekeeper-microsoft",
   errorReporter: "packages/error-reporter",
 } as const;
 const generatedPaths = Object.fromEntries(
@@ -40,6 +41,7 @@ const requiredPaths = [
   "workers.context.name",
   "workers.scheduler.name",
   "workers.customGatekeeper.name",
+  "workers.gatekeeperMicrosoft.name",
   "access.issuer",
   "access.audience",
   "access.admins",
@@ -435,6 +437,7 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
   const context = structuredClone(bases.context);
   const scheduler = structuredClone(bases.scheduler);
   const customGatekeeper = structuredClone(bases.customGatekeeper);
+  const gatekeeperMicrosoft = structuredClone(bases.gatekeeperMicrosoft);
   const errorReporter = config.errorReporting.enabled
     ? structuredClone(bases.errorReporter)
     : undefined;
@@ -448,6 +451,9 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     { binding: "GATEKEEPER_CONTEXT", service: config.workers.context.name },
     { binding: "GATEKEEPER_SCHEDULER", service: config.workers.scheduler.name },
     { binding: "GATEKEEPER_CUSTOM", service: config.workers.customGatekeeper.name },
+    // Also the OAuth redirect target: the router forwards /gatekeeper/microsoft/oauth here
+    // untouched, matching this binding name's lowercased suffix.
+    { binding: "GATEKEEPER_MICROSOFT", service: config.workers.gatekeeperMicrosoft.name },
   ];
 
   setCommon(workshop, config, config.workers.workshop.name);
@@ -513,6 +519,11 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
       service: config.workers.customGatekeeper.name,
       entrypoint: "GatekeeperVendor",
     },
+    {
+      binding: "GATEKEEPER_MICROSOFT",
+      service: config.workers.gatekeeperMicrosoft.name,
+      entrypoint: "GatekeeperVendor",
+    },
   ];
   workshop.kv_namespaces = [
     { binding: "BLUEPRINTS", ...(config.resources.blueprintsKvNamespaceId
@@ -552,12 +563,25 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     CUSTOM_MESSAGE: config.customGatekeeper.message,
   };
 
+  setCommon(gatekeeperMicrosoft, config, config.workers.gatekeeperMicrosoft.name);
+  // BASE_URL drives the OAuth redirect the fetch handler builds (see
+  // packages/gatekeeper-microsoft/src/microsoft.ts's getBaseUrl()) -- it has to be the exact
+  // path the router forwards to this binding, /gatekeeper/microsoft, or the redirect_uri sent to
+  // Microsoft's identity platform won't match what's registered on the Azure App Registration.
+  // TENANT_ID is a var already baked into the package's own wrangler.jsonc base config and
+  // carries through setCommon's clone untouched; CLIENT_ID/CLIENT_SECRET are secrets, installed
+  // separately with `wrangler secret put` and never written here.
+  gatekeeperMicrosoft.vars = {
+    ...gatekeeperMicrosoft.vars,
+    BASE_URL: `${origin}/gatekeeper/microsoft`,
+  };
+
   if (errorReporter) {
     setCommon(errorReporter, config, config.workers.errorReporter!.name);
   }
 
   return {
-    router, workshop, context, scheduler, customGatekeeper,
+    router, workshop, context, scheduler, customGatekeeper, gatekeeperMicrosoft,
     ...(errorReporter && { errorReporter }),
   };
 }
@@ -605,6 +629,7 @@ export function buildCommands(config: DeploymentConfig): BuildCommand[] {
     { args: submoduleBuild("@gadgets/gatekeeper-scheduler", "build:app") },
     { args: submoduleBuild("@gadgets/gatekeeper-scheduler") },
     { args: ownBuild("custom-gatekeeper") },
+    { args: ownBuild("gatekeeper-microsoft") },
     ...(config.errorReporting.enabled ? [{ args: ownBuild("error-reporter") }] : []),
     // Access mode is a build-time constant in the frontend bundle (`src/useAuth.ts`), so it is set
     // here rather than inherited: a bundle built under a different value is wrong, not just stale.
@@ -720,6 +745,7 @@ async function main(): Promise<void> {
     context: await readJsonc(join(root, packageDirs.context, "wrangler.jsonc")),
     scheduler: await readJsonc(join(root, packageDirs.scheduler, "wrangler.jsonc")),
     customGatekeeper: await readJsonc(join(root, packageDirs.customGatekeeper, "wrangler.jsonc")),
+    gatekeeperMicrosoft: await readJsonc(join(root, packageDirs.gatekeeperMicrosoft, "wrangler.jsonc")),
     errorReporter: await readJsonc(join(root, packageDirs.errorReporter, "wrangler.jsonc")),
   });
   reportAiGateway(config);
@@ -740,6 +766,7 @@ async function main(): Promise<void> {
     deployWorker(packageDirs.context, deployArgs);
     deployWorker(packageDirs.scheduler, deployArgs);
     deployWorker(packageDirs.customGatekeeper, deployArgs);
+    deployWorker(packageDirs.gatekeeperMicrosoft, deployArgs);
     deployWorker(packageDirs.workshop, deployArgs);
     // Last: it binds every one of the above.
     deployWorker(packageDirs.router, deployArgs);

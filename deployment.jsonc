@@ -21,6 +21,13 @@
     "context": { "name": "knox-os-context" },
     "scheduler": { "name": "knox-os-scheduler" },
     "customGatekeeper": { "name": "knox-os-gatekeeper" },
+
+    // Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar). See
+    // packages/gatekeeper-microsoft/ and plans/gatekeeper-microsoft.md. Verified free
+    // 2026-08-25. NOT YET LIVE-TESTED: no CLIENT_ID/CLIENT_SECRET installed, and the resource
+    // configurator UI is unbuilt, so connecting an account isn't usable yet even once deployed.
+    "gatekeeperMicrosoft": { "name": "knox-os-gatekeeper-microsoft" },
+
     "errorReporter": { "name": "knox-os-error-reporter" }
   },
 
