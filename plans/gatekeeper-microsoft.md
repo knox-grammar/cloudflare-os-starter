@@ -319,6 +319,37 @@ submodule). It does **not** mean anyone approved that deploy actually happening.
 it to a real `pnpm deploy` as its own decision, separate from this integration work, per the
 operator skill's production-mutation gate.
 
+## Secret provisioning tooling (2026-08-25)
+
+Ported `set-remote-secrets.ts` from Reviewer (originally from Knoxi Apps), generalized since
+this repo deploys several Workers rather than one:
+
+- `scripts/lib/push-secrets.ts` — the idempotent per-secret PUT loop against Cloudflare's API,
+  ported unchanged.
+- `scripts/set-remote-secrets.ts` — takes the Worker script name and a `.prod.env` path as CLI
+  arguments instead of hardcoding one Worker. Resolves `op://` references live via the
+  1Password SDK; nothing decoded ever touches disk.
+- `packages/gatekeeper-microsoft/.prod.env` — placeholder `CLIENT_ID`/`CLIENT_SECRET` `op://`
+  references. Safe to commit (paths, not values); fill in the real vault/item once the Azure
+  App Registration exists.
+- `@1password/sdk` added to the root `package.json`.
+
+Usage, once the App Registration and 1Password item exist:
+
+```sh
+CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad \
+CLOUDFLARE_API_TOKEN=<scoped token, Workers Scripts: Edit> \
+OP_SERVICE_ACCOUNT_TOKEN=<1Password service account token> \
+  node scripts/set-remote-secrets.ts knox-os-gatekeeper-microsoft \
+  packages/gatekeeper-microsoft/.prod.env
+```
+
+`CLOUDFLARE_API_TOKEN` must be a real Cloudflare API token, not the interactive `wrangler
+login` OAuth session — the operator skill's secret-handling rules still apply: never paste or
+print the resolved values, and the Worker must already be deployed (the per-secret endpoint
+404s otherwise). Verified: usage and missing-env-var error paths only, since running it for
+real needs credentials that don't exist yet (no App Registration, no 1Password item).
+
 ## Next steps
 
 1. Resource configurator UI (SKILL Step 6).
