@@ -73,27 +73,27 @@ skill before customizing or enabling it for real use.
 
 ## Current version IDs (last-known-good)
 
-Recorded after the most recent production deploy, 2026-08-26 (added
-`knox-os-gatekeeper-microsoft`, no `CLIENT_ID`/`CLIENT_SECRET` installed yet
--- functionally inert):
+Recorded after the most recent production deploy, 2026-08-26 (Microsoft resource picker
+UI live; `CLIENT_ID` and `CLIENT_SECRET` verified present on that Worker):
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `34305362-62b9-4342-8288-5f0192b82b80` |
-| `knox-os-workshop` | `116405b3-a527-45a9-a2b6-78577aa4472a` |
-| `knox-os-context` | `10bfb51e-a250-42a9-9c92-bfc8d180c4f2` |
-| `knox-os-scheduler` | `1afabc89-d1c0-4ecf-81ef-8b7bfe15b0fc` |
-| `knox-os-gatekeeper` | `397277cc-ceff-4e95-9cdf-b6d43a978e2c` |
-| `knox-os-gatekeeper-microsoft` | `03cde438-480b-4b9a-9460-cafc9530f114` |
-| `knox-os-error-reporter` | `3f58f189-700e-4f38-8ae4-08694cdc6576` |
+| `knox-os` | `98618561-c6fb-4ca2-8503-133269efb26b` |
+| `knox-os-workshop` | `21f8a41c-b33d-4cea-9320-1b07af795c0c` |
+| `knox-os-context` | `4348f3a6-134b-40d2-80c3-f37c5dfc5e02` |
+| `knox-os-scheduler` | `f7ce0613-aaa5-437d-8d15-8cc8603b59fa` |
+| `knox-os-gatekeeper` | `e443911a-12d9-4ee9-89cf-5b5e9db524e8` |
+| `knox-os-gatekeeper-microsoft` | `99c4fc1d-0eb3-4a73-86ba-6736d400c5f6` |
+| `knox-os-error-reporter` | `ae2fcc4a-09a7-4d34-861f-9ca395671e02` |
 
-Previous (first-deploy, 2026-08-25) version IDs, kept for rollback reference:
-`knox-os` `b9933012-4839-4f73-a8c0-db2439523c0d`, `knox-os-workshop`
-`137a5401-b0a6-4d4e-bc11-7150b7fa5b5b`, `knox-os-context`
-`b3b0e6c4-5fca-4460-8026-ecab28771503`, `knox-os-scheduler`
-`d2996ddc-b1c3-4fb5-ae29-c98ffab20877`, `knox-os-gatekeeper`
-`df41701d-0e64-4054-aca7-769d7f5f7a38`, `knox-os-error-reporter`
-`490a1bd8-17aa-4958-8aae-35e4e871a5a6`.
+Immediate pre-picker rollback targets (2026-08-26): `knox-os`
+`34305362-62b9-4342-8288-5f0192b82b80`, `knox-os-workshop`
+`116405b3-a527-45a9-a2b6-78577aa4472a`, `knox-os-context`
+`10bfb51e-a250-42a9-9c92-bfc8d180c4f2`, `knox-os-scheduler`
+`1afabc89-d1c0-4ecf-81ef-8b7bfe15b0fc`, `knox-os-gatekeeper`
+`397277cc-ceff-4e95-9cdf-b6d43a978e2c`, `knox-os-gatekeeper-microsoft`
+`03cde438-480b-4b9a-9460-cafc9530f114`, `knox-os-error-reporter`
+`3f58f189-700e-4f38-8ae4-08694cdc6576`.
 
 **Update this table after every production deploy.** Without it, a rollback
 has nothing to target. Get the current version of any Worker with:
