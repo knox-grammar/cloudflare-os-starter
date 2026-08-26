@@ -8,6 +8,7 @@
     "types:check": "tsc --noEmit"
   },
   "dependencies": {
+    "@gadgets/configurator-ui": "workspace:*",
     "@gadgets/workshop-shared": "workspace:*",
     "capnweb": "catalog:",
     "capnweb-validate": "catalog:"

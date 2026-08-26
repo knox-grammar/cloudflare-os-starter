@@ -1,6 +1,9 @@
 packages:
   - cloudflare-os/packages/workshop-shared
   - cloudflare-os/packages/error-reporting
+  # Required by the wrapper's gatekeeper-microsoft picker iframes. Keep this source package in
+  # the root workspace instead of copying it, so its UI contract stays aligned with the pinned OS.
+  - cloudflare-os/packages/configurator-ui
   - packages/*
 
 # Mirror of cloudflare-os/pnpm-workspace.yaml's catalog. Required, not merely tidy: the two

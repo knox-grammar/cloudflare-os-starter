@@ -499,6 +499,22 @@ export class CalendarApi {
     return result.name;
   }
 
+  /** Calendars visible to the connected user, for the resource-picker UI. */
+  async listCalendars(): Promise<Array<{
+    id: string;
+    name: string;
+    isDefaultCalendar?: boolean;
+    canEdit: boolean;
+  }>> {
+    let result = await this.#request<{ value: Array<{
+      id: string;
+      name: string;
+      isDefaultCalendar?: boolean;
+      canEdit?: boolean;
+    }> }>("/me/calendars?$top=250&$select=id,name,isDefaultCalendar,canEdit");
+    return result.value.map(calendar => ({ ...calendar, canEdit: calendar.canEdit === true }));
+  }
+
   async getOwnerAddress(): Promise<string> {
     let result = await this.#request<{ mail?: string; userPrincipalName?: string }>(
         "/me?$select=mail,userPrincipalName");

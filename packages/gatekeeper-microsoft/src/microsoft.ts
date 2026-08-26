@@ -30,6 +30,12 @@ import {
   GraphEvent,
 } from "./microsoft-api";
 import { AccessTokenCache, AccessTokenRequest } from "./auth-retry";
+import {
+  OutlookCalendarConfiguratorUI,
+  OutlookMailConfiguratorUI,
+} from "./microsoft-configurators";
+import OUTLOOK_CALENDAR_CONFIGURATOR_HTML from "./generated/outlook-calendar-configurator-ui.txt";
+import OUTLOOK_MAIL_CONFIGURATOR_HTML from "./generated/outlook-mail-configurator-ui.txt";
 import type {
   Cursor,
   OutlookMailSession,
@@ -665,14 +671,27 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
     throw new Error(`Unsupported Microsoft resource URL: ${url}`);
   }
 
-  async startResourceConfigurator(_resourceUrlPattern: string): Promise<ResourceConfiguratorFrame> {
-    // TODO(Phase 1 follow-up): build the folder-picker (mail) and calendar-picker (calendar)
-    // configurator UIs per write-gatekeeper's Step 6, using @gadgets/configurator-ui the way
-    // gatekeeper-google's src/configurator/*-ui.tsx do. Not implemented in this pass -- see
-    // plans/gatekeeper-microsoft.md.
-    throw new Error(
-        "Resource selection UI for the Microsoft gatekeeper is not implemented yet. " +
-        "See plans/gatekeeper-microsoft.md.");
+  async startResourceConfigurator(resourceUrlPattern: string): Promise<ResourceConfiguratorFrame> {
+    // The iframe receives only a search/list capability. It never gets an access token, account
+    // stub, or the resource gatekeeper itself.
+    const getToken = async (opts?: AccessTokenRequest) =>
+      (await this.#account().getAccessToken(opts)).token;
+
+    if (resourceUrlPattern === OUTLOOK_MAIL_RESOURCE.urlPattern) {
+      return {
+        iframeHtml: OUTLOOK_MAIL_CONFIGURATOR_HTML,
+        ui: new RpcStub(new OutlookMailConfiguratorUI(getToken)),
+      };
+    }
+
+    if (resourceUrlPattern === OUTLOOK_CALENDAR_RESOURCE.urlPattern) {
+      return {
+        iframeHtml: OUTLOOK_CALENDAR_CONFIGURATOR_HTML,
+        ui: new RpcStub(new OutlookCalendarConfiguratorUI(getToken)),
+      };
+    }
+
+    throw new Error(`Unsupported resource configurator type: ${resourceUrlPattern}`);
   }
 
   async revoke(): Promise<void> {

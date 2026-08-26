@@ -5,6 +5,8 @@
     "lib": ["ESNext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react",
+    "jsxFactory": "h",
     "types": ["./worker-configuration.d.ts"],
     // TypeScript 7 requires this explicitly once outDir is set (TS5011).
     "rootDir": "./src",

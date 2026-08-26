@@ -1,9 +1,8 @@
 // Vite+ per-package settings, mirroring packages/custom-gatekeeper/vite.config.ts.
 //
-// `build` and `test` are tasks rather than package.json scripts because each reads a path it also
-// writes, and vp declines to cache such a task: `tsc` emits into `dist/`, which automatic tracking
-// otherwise counts as an input of the same package. vp forbids a task and a script sharing a name,
-// so there are no `build`/`test` scripts -- `vp run -F gatekeeper-microsoft <task>` replaces them.
+// `build` and `build:configurator` are tasks rather than package.json scripts because each reads a
+// path it also writes, and vp declines to cache such a task. The configurator build mirrors the
+// pinned OS convention, but points at its shared scripts through this wrapper's submodule path.
 
 // This package's own `tsc` output. Package-relative, not workspace-wide: a sibling's `dist/` may be
 // a real input via its `exports`.
@@ -25,8 +24,25 @@ const ownWranglerValidate = { pattern: '!.wrangler/**', base: 'package' } as con
 export default {
   run: {
     tasks: {
+      // Generated iframe HTML may embed error-reporting configuration. Always clear stale source
+      // map artifacts first, exactly as the shared OS configurator task does.
+      'clean:error-reporting-artifacts': {
+        command: 'node ../../cloudflare-os/scripts/clean-error-reporting-artifacts.ts .',
+        cache: false,
+      },
+      'build:configurator': {
+        command: 'node ../../cloudflare-os/scripts/build-gatekeeper-configurator.ts .',
+        dependsOn: ['clean:error-reporting-artifacts'],
+        input: [
+          { auto: true },
+          { pattern: '!**/src/generated/**', base: 'workspace' },
+        ],
+        output: ['src/generated/**'],
+        env: ['VITE_FRONTEND_ERROR_REPORTING'],
+      },
       build: {
         command: 'rm -rf .wrangler/validate && tsc',
+        dependsOn: ['build:configurator'],
         input: [{ auto: true }, ownDist, ownWranglerValidate],
         output: ['dist/**'],
       },

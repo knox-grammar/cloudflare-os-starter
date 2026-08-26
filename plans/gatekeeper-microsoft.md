@@ -350,19 +350,39 @@ print the resolved values, and the Worker must already be deployed (the per-secr
 404s otherwise). Verified: usage and missing-env-var error paths only, since running it for
 real needs credentials that don't exist yet (no App Registration, no 1Password item).
 
+## Resource configurator UI (2026-08-26)
+
+Implemented SKILL Step 6 using the same `@gadgets/configurator-ui` pattern as the pinned
+Google gatekeeper:
+
+- Outlook Mail offers a **whole mailbox** or **one top-level folder**. The sandboxed iframe gets
+  only `listFolders(query)`; it never receives a Graph token or account capability. Folder choices
+  become canonical `https://outlook.office.com/mail/#folder/<encoded-name>` resource URLs.
+- Outlook Calendar offers one **editable calendar**. The iframe gets only `listCalendars(query)`;
+  Graph's `canEdit` result filters out calendars where write actions would fail. Choices become
+  canonical `https://outlook.office.com/calendar/<encoded-id>/` resource URLs.
+- Both forms round-trip a concrete resource URL into editable prefilled values, so an agent's
+  `requestConnection` does not discard a scope it already knows.
+- `CalendarApi.listCalendars()` is the only new Graph API call. Folder listing uses the existing
+  top-level `/me/mailFolders` behavior, deliberately matching `resolveFolderId()`'s existing
+  name-based scope semantics rather than pretending nested folders are supported.
+- The package now participates in the root workspace's pinned `@gadgets/configurator-ui` source
+  package and runs the upstream configurator generator before `tsc`. The build task still clears
+  stale `.wrangler/validate` artifacts before typechecking.
+
+Verified with full `pnpm check`: all 26 wrapper tests pass; both iframe HTML artifacts generate;
+the Microsoft Worker bundles and dry-run deploys with the new UI; and the other six Workers still
+build/dry-run cleanly. This change is **not deployed yet**.
+
 ## Next steps
 
-1. Resource configurator UI (SKILL Step 6).
+1. Deploy this configurator build, then manually connect a real Knox Microsoft 365 account and
+   test the full OAuth → folder/calendar selection → connection path. The App Registration is
+   single-tenant with redirect URI `https://os.knoxi.dev/gatekeeper/microsoft/oauth`; the first
+   Worker deploy and `CLIENT_ID`/`CLIENT_SECRET` secret installation have already happened.
 2. Caching (the conversation-listing gap above) and, if it proves necessary in testing,
    simulation.
 3. Confirm the observer strategies (both currently A / always-throw) against real Graph
    behavior and real usage — particularly whether calendar sharing ever needs to move to B.
 4. A real HTML↔Markdown converter and real per-user avatar fetch, if the first-pass versions
    prove insufficient in testing.
-5. Provision an Azure App Registration (single-tenant, redirect URI
-   `https://os.knoxi.dev/gatekeeper/microsoft/oauth`), install `CLIENT_ID`/`CLIENT_SECRET`
-   with `wrangler secret put` against `knox-os-gatekeeper-microsoft`, and get explicit
-   approval before the first real `pnpm deploy` that includes this Worker.
-6. Manual end-to-end test against a real Knox Microsoft 365 account once `CLIENT_ID`/
-   `CLIENT_SECRET` are provisioned (Azure App Registration, single-tenant, redirect URI
-   `<PUBLIC_BASE_URL>/gatekeeper/microsoft/oauth`).
