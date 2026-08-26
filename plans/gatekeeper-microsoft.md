@@ -374,9 +374,27 @@ Verified with full `pnpm check`: all 26 wrapper tests pass; both iframe HTML art
 the Microsoft Worker bundles and dry-run deploys with the new UI; and the other six Workers still
 build/dry-run cleanly. This change is **not deployed yet**.
 
+## OAuth grant tracking fix (2026-08-26)
+
+Production testing exposed a real scope-normalization bug: the authorize request correctly uses
+fully-qualified Graph scopes (`https://graph.microsoft.com/Calendars.ReadWrite`), but Entra's token
+response reports the same grant as `Calendars.ReadWrite`. The original exact-string comparison then
+recorded no grantable resources, so Workshop permanently showed “Additional permission needed” even
+after a successful, immediately-closing consent tab.
+
+`microsoft-scopes.ts` now canonicalizes only those equivalent Graph forms before mapping them to
+resource URL patterns. `scripts/microsoft-scopes.test.ts` first reproduced the empty set with the
+short response form, then verifies both short and fully-qualified representations. The same fix
+removes the `https://graph.microsoft.com/v1.0/me/photo/$value` avatar URL: the browser cannot attach
+the Worker-held OAuth token to a direct `<img>` request, so it always returned 401. Workshop now
+falls back to the Microsoft vendor logo until an authenticated photo proxy is intentionally built.
+
+Verified: both regression cases pass, Microsoft package build passes, and full `pnpm check` passes.
+This fix is **not deployed yet**.
+
 ## Next steps
 
-1. Deploy this configurator build, then manually connect a real Knox Microsoft 365 account and
+1. Deploy the scope-normalization fix, then manually connect a real Knox Microsoft 365 account and
    test the full OAuth → folder/calendar selection → connection path. The App Registration is
    single-tenant with redirect URI `https://os.knoxi.dev/gatekeeper/microsoft/oauth`; the first
    Worker deploy and `CLIENT_ID`/`CLIENT_SECRET` secret installation have already happened.

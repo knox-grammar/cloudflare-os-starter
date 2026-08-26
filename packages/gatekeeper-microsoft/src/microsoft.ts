@@ -31,6 +31,14 @@ import {
 } from "./microsoft-api";
 import { AccessTokenCache, AccessTokenRequest } from "./auth-retry";
 import {
+  grantedResourcesFromScopes,
+  IDENTITY_SCOPES,
+  OUTLOOK_CALENDAR_RESOURCE,
+  OUTLOOK_MAIL_RESOURCE,
+  resourceUrlPatternsToOAuthScopes,
+  SUPPORTED_RESOURCES,
+} from "./microsoft-scopes";
+import {
   OutlookCalendarConfiguratorUI,
   OutlookMailConfiguratorUI,
 } from "./microsoft-configurators";
@@ -127,56 +135,7 @@ type StoredNonce = {
 // Resource types and OAuth scopes
 // ===========================================================================================
 
-const IDENTITY_SCOPES = ["openid", "profile", "email", "User.Read", "offline_access"];
 const AUTH_SCOPES = IDENTITY_SCOPES;
-
-const OUTLOOK_MAIL_RESOURCE: SupportedResource = {
-  urlPattern: "https://outlook.office.com/mail/*",
-  title: "Outlook Mailbox",
-  description: "Read email, organise it, and draft replies.",
-  grantable: true,
-};
-
-const OUTLOOK_CALENDAR_RESOURCE: SupportedResource = {
-  urlPattern: "https://outlook.office.com/calendar/:calendarId/*",
-  title: "Outlook Calendar",
-  description: "Read and manage a single Outlook calendar.",
-  grantable: true,
-};
-
-const RESOURCE_SCOPES: { resource: SupportedResource; scopes: string[] }[] = [
-  { resource: OUTLOOK_MAIL_RESOURCE, scopes: ["https://graph.microsoft.com/Mail.ReadWrite"] },
-  { resource: OUTLOOK_CALENDAR_RESOURCE, scopes: ["https://graph.microsoft.com/Calendars.ReadWrite"] },
-];
-
-const SUPPORTED_RESOURCES: SupportedResource[] = RESOURCE_SCOPES.map(entry => entry.resource);
-
-function validateResourceUrlPatterns(resourceUrlPatterns?: string[]): void {
-  if (resourceUrlPatterns === undefined) return;
-  let known = new Set(RESOURCE_SCOPES.map(entry => entry.resource.urlPattern));
-  let unknown = resourceUrlPatterns.filter(pattern => !known.has(pattern));
-  if (unknown.length > 0) {
-    throw new Error(`Unknown grantable resource URL pattern(s): ${unknown.join(", ")}`);
-  }
-}
-
-function resourceUrlPatternsToOAuthScopes(resourceUrlPatterns?: string[]): string[] {
-  validateResourceUrlPatterns(resourceUrlPatterns);
-  let scopes = new Set<string>(IDENTITY_SCOPES);
-  for (let entry of RESOURCE_SCOPES) {
-    if (resourceUrlPatterns === undefined || resourceUrlPatterns.includes(entry.resource.urlPattern)) {
-      for (let scope of entry.scopes) scopes.add(scope);
-    }
-  }
-  return [...scopes];
-}
-
-function grantedResourcesFromScopes(grantedOAuthScopes: string[]): string[] {
-  let granted = new Set(grantedOAuthScopes.map(s => s.toLowerCase()));
-  return RESOURCE_SCOPES
-      .filter(entry => entry.scopes.every(scope => granted.has(scope.toLowerCase())))
-      .map(entry => entry.resource.urlPattern);
-}
 
 const MICROSOFT_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(MICROSOFT_LOGO_SVG)}`;
 

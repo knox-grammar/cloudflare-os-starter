@@ -120,14 +120,6 @@ export async function refreshAccessToken(
  */
 export const REVOKE_IS_LOCAL_ONLY = true;
 
-/**
- * Generic Microsoft avatar, used because per-user photos require a separate authenticated fetch
- * (`GET /me/photo/$value`, binary) this Phase-1 pass doesn't implement. Follow-up work: fetch and
- * cache the real photo, or omit avatar display entirely rather than showing a placeholder for
- * everyone.
- */
-const GENERIC_AVATAR_URL = "https://graph.microsoft.com/v1.0/me/photo/$value";
-
 export async function getMicrosoftAccountDescription(accessToken: string)
     : Promise<AccountDescription> {
   let response = await fetch(
@@ -141,7 +133,10 @@ export async function getMicrosoftAccountDescription(accessToken: string)
   return {
     displayName: data.displayName ?? data.mail ?? data.userPrincipalName,
     uniqueName: data.mail ?? data.userPrincipalName,
-    avatar: { url: GENERIC_AVATAR_URL },
+    // Graph photos require an OAuth Authorization header. AccountAvatar renders this URL directly
+    // in the browser, so publishing `/me/photo/$value` caused a noisy unauthenticated 401. Leave
+    // it empty and let Workshop fall back to the vendor logo until we add an authenticated proxy.
+    avatar: { url: "" },
   };
 }
 
