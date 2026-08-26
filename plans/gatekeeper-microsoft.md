@@ -340,8 +340,8 @@ Usage, once the App Registration and 1Password item exist:
 CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad \
 CLOUDFLARE_API_TOKEN=<scoped token, Workers Scripts: Edit> \
 OP_SERVICE_ACCOUNT_TOKEN=<1Password service account token> \
-  node scripts/set-remote-secrets.ts knox-os-gatekeeper-microsoft \
-  packages/gatekeeper-microsoft/.prod.env
+  node scripts/set-remote-secrets.ts --script knox-os-gatekeeper-microsoft \
+  --env-file packages/gatekeeper-microsoft/.prod.env
 ```
 
 `CLOUDFLARE_API_TOKEN` must be a real Cloudflare API token, not the interactive `wrangler

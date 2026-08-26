@@ -15,12 +15,12 @@
  * needs the script to already exist -- never before.
  *
  * Usage:
- *   node scripts/set-remote-secrets.ts <worker-script-name> <path-to-.prod.env>
+ *   node scripts/set-remote-secrets.ts --script <worker-script-name> --env-file <path-to-.prod.env>
  *
  * Example, for this repo's Microsoft gatekeeper:
  *   CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... OP_SERVICE_ACCOUNT_TOKEN=... \
- *     node scripts/set-remote-secrets.ts knox-os-gatekeeper-microsoft \
- *     packages/gatekeeper-microsoft/.prod.env
+ *     node scripts/set-remote-secrets.ts --script knox-os-gatekeeper-microsoft \
+ *     --env-file packages/gatekeeper-microsoft/.prod.env
  *
  * Ported from Reviewer's (and, before that, Knoxi Apps') set-remote-secrets.ts, generalized to
  * take the script name and env file as arguments rather than hardcoding one Worker: this repo
@@ -60,12 +60,25 @@ function parseEnvFile(text: string): EncodedSecret[] {
   return secrets;
 }
 
-async function main() {
-  const [scriptName, envFileArg] = process.argv.slice(2);
+function parseArgs(argv: string[]): { scriptName: string; envFileArg: string } {
+  let scriptName: string | undefined;
+  let envFileArg: string | undefined;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--script") scriptName = argv[++i];
+    else if (argv[i] === "--env-file") envFileArg = argv[++i];
+  }
+
   if (!scriptName || !envFileArg) {
     throw new Error(
-      "Usage: node scripts/set-remote-secrets.ts <worker-script-name> <path-to-.prod.env>");
+      "Usage: node scripts/set-remote-secrets.ts --script <worker-script-name> " +
+        "--env-file <path-to-.prod.env>");
   }
+  return { scriptName, envFileArg };
+}
+
+async function main() {
+  const { scriptName, envFileArg } = parseArgs(process.argv.slice(2));
   const envFilePath = resolve(process.cwd(), envFileArg);
 
   const opToken = requireEnv("OP_SERVICE_ACCOUNT_TOKEN");
