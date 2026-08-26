@@ -17,10 +17,8 @@ const ownDist = { pattern: '!dist/**', base: 'package' } as const
 // (harmless -- wrangler regenerates it whenever it's next needed) is the reliable fix.
 const ownWranglerValidate = { pattern: '!.wrangler/**', base: 'package' } as const
 
-// No `test` task yet: there are no test files under src/ (see plans/gatekeeper-microsoft.md).
-// `vitest run` exits 1 on an empty suite, which would fail `vp run --filter '!cloudflare-os-starter'
-// --cache test` for every package. Add the task back (see packages/custom-gatekeeper/vite.config.ts
-// for the shape) once real tests exist.
+// The Microsoft OAuth scope regression test lives beside its pure mapping module. Keeping it in
+// this package prevents the root scripts typecheck from following Worker-only API types.
 export default {
   run: {
     tasks: {
@@ -45,6 +43,11 @@ export default {
         dependsOn: ['build:configurator'],
         input: [{ auto: true }, ownDist, ownWranglerValidate],
         output: ['dist/**'],
+      },
+      test: {
+        command: 'vitest run',
+        input: [{ auto: true }, ownDist, ownWranglerValidate],
+        output: [{ auto: true }, ownDist, ownWranglerValidate],
       },
     },
   },

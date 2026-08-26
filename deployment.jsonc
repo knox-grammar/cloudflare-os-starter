@@ -57,6 +57,9 @@
     "kvNamespaceId": null
   },
 
+  // Agent code's Temporal `time.js` module uses this rather than the Worker runtime's UTC clock.
+  "agent": { "timeZone": "Australia/Sydney" },
+
   "customGatekeeper": {
     "name": "Knox Grammar School",
     "message": "Read-only deployment information for the Knox OS instance. Ask about the deployment environment and configured integrations."

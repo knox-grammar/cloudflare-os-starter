@@ -45,6 +45,7 @@ const requiredPaths = [
   "access.issuer",
   "access.audience",
   "access.admins",
+  "agent.timeZone",
   "aiGateway.enabled",
   "errorReporting.enabled",
   "customGatekeeper.name",
@@ -241,6 +242,15 @@ export function validateConfig(config: DeploymentConfig): DeploymentConfig {
   }
 
   validatePublicBaseUrl(config, route);
+
+  try {
+    if (new Intl.DateTimeFormat(undefined, { timeZone: config.agent.timeZone })
+        .resolvedOptions().timeZone !== config.agent.timeZone) {
+      throw new Error("not canonical");
+    }
+  } catch {
+    throw new Error("agent.timeZone must be a canonical IANA timezone, e.g. Australia/Sydney.");
+  }
 
   const sharingDomain = config.context.sharingDomain;
   if (sharingDomain !== null &&
@@ -464,6 +474,7 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     // Upstream builds OAuth redirect URIs and other absolute links from this. The backend has no
     // public route of its own, so the router's origin is the only correct value.
     PUBLIC_BASE_URL: origin,
+    AGENT_TIME_ZONE: config.agent.timeZone,
   };
   const gateway = aiGatewayPlan(config);
   if (gateway) {

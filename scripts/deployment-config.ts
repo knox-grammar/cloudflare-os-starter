@@ -121,6 +121,11 @@ export interface DeploymentConfig {
   access: AccessConfig;
   aiGateway: AiGatewayConfigInput;
   context: ContextConfig;
+  /** Agent code-mode defaults that are deployment policy, not per-user guesses. */
+  agent: {
+    /** IANA timezone used by the built-in Temporal `time.js` module. */
+    timeZone: string;
+  };
   /** Display text the example custom Gatekeeper serves to agents. */
   customGatekeeper: { name: string; message: string };
   /** Private explicit-issue destination. */

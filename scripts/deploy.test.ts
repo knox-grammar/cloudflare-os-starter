@@ -38,6 +38,7 @@ const validConfig: DeploymentConfig = {
     kvNamespaceId: "context-kv-id",
     artifacts: { enabled: true, namespace: "acme-context-collections" },
   },
+  agent: { timeZone: "Australia/Sydney" },
   customGatekeeper: { name: "Acme", message: "Use the company handbook." },
   errorReporting: { enabled: true, environment: "production", release: "abc123" },
   resources: {
@@ -197,6 +198,7 @@ test("generates Access-mode Workshop, Context, and custom Gatekeeper configs", a
   assert.equal(vars.CF_ACCESS_ISS, validConfig.access.issuer);
   assert.equal(vars.CF_ACCESS_AUD, validConfig.access.audience);
   assert.equal(vars.PUBLIC_BASE_URL, "https://os.example.com");
+  assert.equal(vars.AGENT_TIME_ZONE, "Australia/Sydney");
   assert.equal(vars.CF_AI_GATEWAY, "cloudflare-os");
   assert.equal(vars.CF_AI_GATEWAY_PROVIDERS, "anthropic,cloudflare");
   assert.deepEqual(generated.workshop.ai, { binding: "WORKERS_AI" });
