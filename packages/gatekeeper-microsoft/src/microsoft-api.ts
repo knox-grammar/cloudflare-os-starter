@@ -24,6 +24,14 @@ export function authorizeEndpoint(tenantId: string): string {
   return `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
 }
 
+export async function pkceChallenge(verifier: string): Promise<string> {
+  let digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(verifier)));
+  let binary = "";
+  for (let byte of digest) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 async function readErrorText(response: Response, maxBytes = 4096): Promise<string> {
   let text = await response.text();
   return text.length > maxBytes ? text.slice(0, maxBytes) + "…" : text;
@@ -32,13 +40,14 @@ async function readErrorText(response: Response, maxBytes = 4096): Promise<strin
 /** `signal` lets the caller bound the round trip; UserAccount holds the credential mutex across this. */
 export async function exchangeAuthCode(
     tenantId: string, code: string, clientId: string, clientSecret: string, redirectUri: string,
-    signal?: AbortSignal): Promise<MicrosoftOAuthGrant> {
+    codeVerifier: string, signal?: AbortSignal): Promise<MicrosoftOAuthGrant> {
   let params = new URLSearchParams();
   params.set("client_id", clientId);
   params.set("client_secret", clientSecret);
   params.set("code", code);
   params.set("redirect_uri", redirectUri);
   params.set("grant_type", "authorization_code");
+  params.set("code_verifier", codeVerifier);
 
   let response = await fetch(tokenEndpoint(tenantId), {
     method: "POST",
@@ -70,7 +79,11 @@ export type RefreshFailure =
   | { ok: false; reason: "revoked" }
   | { ok: false; reason: "policyBlocked"; detail: string };
 
-export type AccessTokenResult = { ok: true; token: MicrosoftAccessToken } | RefreshFailure;
+export type AccessTokenResult = {
+  ok: true;
+  token: MicrosoftAccessToken;
+  refreshToken?: string;
+} | RefreshFailure;
 
 /** Exchange a refresh token for an access token. `signal` lets the caller bound the round trip. */
 export async function refreshAccessToken(
@@ -103,10 +116,15 @@ export async function refreshAccessToken(
     throw new Error(`Failed to refresh access token: ${body.error} ${body.error_description}`);
   }
 
-  let data = await response.json<{access_token: string, expires_in: number}>();
+  let data = await response.json<{
+    access_token: string;
+    expires_in: number;
+    refresh_token?: string;
+  }>();
   return {
     ok: true,
     token: { token: data.access_token, expires: new Date(Date.now() + data.expires_in * 1000) },
+    ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
   };
 }
 

@@ -1,10 +1,11 @@
 /**
  * Microsoft 365 APIs available to Gadgets.
  *
- * Two independent resource types, each with its own session:
+ * Three independent resource types, each with its own session:
  *
  * - `OutlookMailSession` — a mailbox, optionally narrowed to one folder or one search.
  * - `OutlookCalendarSession` — a single calendar.
+ * - `SharePointDocumentSession` — one file, or one folder and its descendants.
  *
  * A binding gives access to exactly one of these. Which one you have is shown by the
  * binding's type.
@@ -186,6 +187,63 @@ export interface OutlookMailSession {
    * reviews and sends it themselves from Outlook.
    */
   createDraft(message: DraftMail): Promise<void>;
+}
+
+// =======================================================================================
+// SharePoint
+// =======================================================================================
+
+/** Metadata for a file or folder within the connected SharePoint resource. */
+export interface SharePointItemMetadata {
+  /** Stable Microsoft Graph item id. */
+  id: string;
+  name: string;
+  kind: "file" | "folder";
+  /** Current browser URL. This may change when the item is renamed or moved. */
+  webUrl: string;
+  /** Size in bytes. Folders normally report zero. */
+  size: number;
+  /** Version identifier, when available. */
+  eTag?: string;
+  /** MIME type for a file, when available. */
+  mimeType?: string;
+  modifiedAt: string;
+  modifiedBy?: string;
+}
+
+/** One page of SharePoint items. Pass `cursor` back unchanged to continue. */
+export interface SharePointItemPage {
+  items: SharePointItemMetadata[];
+  /** Opaque continuation value. Omitted on the last page. */
+  cursor?: string;
+}
+
+/** One SharePoint file, or one folder and the files and folders beneath it. */
+export interface SharePointDocumentSession {
+  /** Metadata for the bound file or folder. */
+  metadata(): Promise<SharePointItemMetadata>;
+
+  /** Direct children of the bound folder. Throws when the bound item is a file. */
+  listChildren(options?: { cursor?: string; limit?: number }): Promise<SharePointItemPage>;
+
+  /** Search beneath the bound folder. Throws when the bound item is a file. */
+  search(query: string, options?: { cursor?: string; limit?: number }): Promise<SharePointItemPage>;
+
+  /**
+   * Open a file or folder beneath this folder using an item id returned by `listChildren()` or
+   * `search()`. The returned item can be read or browsed according to its kind.
+   *
+   * Throws when this item is a file or when `itemId` is not a descendant of this binding.
+   */
+  open(itemId: string): Promise<SharePointDocumentSession>;
+
+  /**
+   * Read raw bytes from the bound file. Throws when the bound item is a folder.
+   *
+   * Files may be at most 50 MB, and one call returns at most 5 MB. Use `offset` and
+   * `length` to read a larger file in bounded chunks.
+   */
+  read(options?: { offset?: number; length?: number }): Promise<ArrayBuffer>;
 }
 
 // =======================================================================================

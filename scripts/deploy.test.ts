@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parse, type ParseError } from "jsonc-parser";
-import { aiGatewayPlan, buildCommands, generateConfigs, validateConfig } from "./deploy.ts";
+import {
+  aiGatewayPlan,
+  assertSubmoduleCommit,
+  buildCommands,
+  generateConfigs,
+  validateConfig,
+} from "./deploy.ts";
 import type {
   BaseConfigs,
   DeploymentConfig,
@@ -100,6 +106,14 @@ function sharingDomain(generated: GeneratedConfigs): unknown {
   return generated.workshop.services!
     .find((service) => service.binding === "GATEKEEPER_CONTEXT")!.props!.sharingDomain;
 }
+
+test("requires the reviewed cloudflare-os gitlink", () => {
+  assert.doesNotThrow(() => assertSubmoduleCommit("abc123", "abc123"));
+  assert.throws(
+    () => assertSubmoduleCommit("abc123", "def456"),
+    /checked out at def456.*pins abc123.*git submodule update --init/s,
+  );
+});
 
 test("rejects deployment placeholders", () => {
   assert.throws(

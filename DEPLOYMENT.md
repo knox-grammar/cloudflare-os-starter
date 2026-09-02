@@ -22,6 +22,7 @@ before making any change described here.
 | `knox-os-context` | Context Gatekeeper | none — service binding only |
 | `knox-os-scheduler` | Scheduler Gatekeeper | none — service binding only |
 | `knox-os-gatekeeper` | Custom Gatekeeper | none — service binding only |
+| `knox-os-gatekeeper-microsoft` | Microsoft Outlook and selected SharePoint Gatekeeper | none — service binding only |
 | `knox-os-error-reporter` | Error Reporter | none — service binding only |
 
 Every Worker other than `knox-os` must always show `workers_dev: false` and
@@ -73,21 +74,39 @@ skill before customizing or enabling it for real use.
 
 ## Current version IDs (last-known-good)
 
-Recorded after the most recent production deploy, 2026-08-26 (Microsoft resource picker
-UI live; Entra short-form Graph scopes normalize correctly; `CLIENT_ID` and `CLIENT_SECRET`
-verified present on that Worker):
+Recorded after the production continuation deploy, 2026-09-02 (recursive SharePoint
+folder reads and the Cloudflare Workers download-redirect compatibility fix live for the
+selected `digital-utilities` site; `CLIENT_ID` and `CLIENT_SECRET` verified present by name):
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `ee33dc27-242c-4159-af06-36327faccb1e` |
-| `knox-os-workshop` | `8818ac8a-8058-418a-a34b-d9bf95822b4a` |
-| `knox-os-context` | `4aa7da4f-f183-4da2-a204-2f2723a4144f` |
-| `knox-os-scheduler` | `5290ce1c-d6fd-42b1-ac81-d4446fc48250` |
-| `knox-os-gatekeeper` | `4969d141-1a36-41ca-b027-c6ce03d30415` |
-| `knox-os-gatekeeper-microsoft` | `8628e484-7a2b-41cf-80fc-e034a1c67c73` |
-| `knox-os-error-reporter` | `ff10b958-a5d8-4b95-9b84-d169866c1524` |
+| `knox-os` | `28897f6b-3ef7-4f8f-8d62-ac500de59ba2` |
+| `knox-os-workshop` | `1ef330be-ac6f-4842-a27d-53eb41300d53` |
+| `knox-os-context` | `19a6ea72-8da6-42ec-9004-06a22b2c70f3` |
+| `knox-os-scheduler` | `e4d402f5-1b96-432d-903d-88f3409ab2aa` |
+| `knox-os-gatekeeper` | `ac05bccf-2db4-401b-abd3-bf5f31806c35` |
+| `knox-os-gatekeeper-microsoft` | `39c8ebaf-0cbe-4359-89a0-d32410711cc0` |
+| `knox-os-error-reporter` | `81b995e8-1e16-4b78-9f1c-cce381c98941` |
 
-Immediate pre-scope-fix rollback targets (2026-08-26): `knox-os`
+Immediate pre-redirect-fix rollback targets (2026-09-02): `knox-os`
+`c9c2ef12-46ff-4372-bccb-35fb62b12693`, `knox-os-workshop`
+`56ec48a1-51e0-46db-ac9c-f7ae19ec75ea`, `knox-os-context`
+`0fcf6670-0694-4d94-9ef1-7779bfd25bde`, `knox-os-scheduler`
+`0fab586e-7d69-438f-b3a2-e1a60e1386b0`, `knox-os-gatekeeper`
+`3cb154f6-256b-4eb9-90ae-57a842853c54`, `knox-os-gatekeeper-microsoft`
+`3392e75e-50da-4486-aa8e-fabaedace656`, `knox-os-error-reporter`
+`8ece7619-18dc-433b-b454-539f1df21e81`.
+
+Immediate pre-recursive-read rollback targets (2026-09-02): `knox-os`
+`4aa36c42-9f85-4f71-953a-a503e8e5766c`, `knox-os-workshop`
+`78b37a80-5af6-4b29-a0e8-2761112d528e`, `knox-os-context`
+`61f6a25a-9da8-4cb3-b92e-cccf83dd189b`, `knox-os-scheduler`
+`eb783738-9aa8-4697-be8d-baa140f87aef`, `knox-os-gatekeeper`
+`131c2b2f-3161-4ca9-9c48-b6d9714e96c0`, `knox-os-gatekeeper-microsoft`
+`0efaf5a9-7e15-4afa-8f5e-0c494d48b71e`, `knox-os-error-reporter`
+`7b0f807b-611a-4c41-b18d-242a4585641e`.
+
+Immediate pre-SharePoint rollback targets (2026-08-26): `knox-os`
 `98618561-c6fb-4ca2-8503-133269efb26b`, `knox-os-workshop`
 `21f8a41c-b33d-4cea-9320-1b07af795c0c`, `knox-os-context`
 `4348f3a6-134b-40d2-80c3-f37c5dfc5e02`, `knox-os-scheduler`

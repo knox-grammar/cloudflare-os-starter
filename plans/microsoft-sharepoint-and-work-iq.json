@@ -1,0 +1,224 @@
+{
+  "slug": "microsoft-sharepoint-and-work-iq",
+  "title": "Microsoft SharePoint and Work IQ Gatekeepers",
+  "status": "approved",
+  "created": "2026-09-01",
+  "goal": "Add production-oriented, resource-confined SharePoint support to the existing delegated Graph Gatekeeper, then design and optionally build a separate Work IQ Gatekeeper after SharePoint is verified.",
+  "decisions": [
+    {
+      "id": "A1",
+      "summary": "Keep Microsoft Graph and Work IQ in separate packages with separate OAuth accounts, token audiences, callbacks, and deployment controls."
+    },
+    {
+      "id": "A2",
+      "summary": "Use delegated Sites.Selected with tenant-admin-provisioned read or write assignments on explicitly approved sites."
+    },
+    {
+      "id": "A3",
+      "summary": "Bind SharePoint resources by immutable siteId, driveId, and itemId rather than mutable SharePoint paths."
+    },
+    {
+      "id": "A4",
+      "summary": "Deliver document/folder capability with observer strategy B before site-wide capability with strategy C."
+    },
+    {
+      "id": "A5",
+      "summary": "Ship and verify read-only SharePoint access before separately approving writes."
+    },
+    {
+      "id": "A6",
+      "summary": "Fail closed on ambiguous Graph errors and Work IQ tool/schema drift."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "S0",
+      "title": "Confirm authority and tenant operations",
+      "status": "complete",
+      "dependsOn": [],
+      "acceptance": "Authority-before/after table, selected-site assignment process, file-size limits, and named approver are documented without credentials.",
+      "verification": "Approved 2026-09-01 and updated 2026-09-02: digital-utilities site, whole-site read role, separate Global Administrator operation, exact URL selection, files/folders only, raw bytes, 50 MB streamed, 5 MB buffered, uploads disabled, shared Gadgets fail closed unless observer checks pass.",
+      "evidence": {
+        "site": "https://knoxnswedu.sharepoint.com/sites/digital-utilities",
+        "evaluationFixture": "/Shared Documents/test-uploads/os-test/",
+        "siteGrantConfirmed": "2026-09-02",
+        "role": "read",
+        "provisioning": "Separate tenant Global Administrator operation; no runtime grant-management authority",
+        "selection": "exact URL",
+        "scope": "files and folders",
+        "content": "raw bytes",
+        "streamedDownloadLimitMb": 50,
+        "bufferedReadLimitMb": 5,
+        "uploads": "disabled",
+        "sharedGadgets": "allowed only after observer-owned delegated access verification"
+      }
+    },
+    {
+      "id": "S1",
+      "title": "Harden existing Graph OAuth",
+      "status": "complete",
+      "dependsOn": ["S0"],
+      "acceptance": "Tests prove PKCE, OAuth replay/expiry rejection, incremental consent, refresh-token rotation, and existing Outlook behavior.",
+      "verification": "Completed 2026-09-01: RFC 7636 challenge, token-exchange verifier, and refresh rotation tests pass; verifier uses existing expiring one-time OAuth state; package tests, tsc --noEmit, and full pnpm check pass.",
+      "evidence": {
+        "test": "pnpm --dir packages/gatekeeper-microsoft exec vitest run src/microsoft-oauth.test.ts",
+        "packageValidation": "rm -rf .wrangler/validate && pnpm exec vitest run && pnpm types:check",
+        "fullValidation": "pnpm check"
+      }
+    },
+    {
+      "id": "S2",
+      "title": "Propose and approve SharePoint capability interfaces",
+      "status": "complete",
+      "dependsOn": ["S0"],
+      "acceptance": "Operator explicitly approves agent-facing interfaces, canonical resource URLs, granularities, observation/action classification, and JSDoc.",
+      "verification": "Approved 2026-09-01: read-only SharePointDocumentSession; immutable file/folder binding; metadata, folder children/search, bounded raw-byte reads; strategy B; no writes; site capability deferred to strategy-C review."
+    },
+    {
+      "id": "S3",
+      "title": "Add SharePoint resource and scopes model",
+      "status": "complete",
+      "dependsOn": ["S1", "S2"],
+      "acceptance": "SharePoint requests delegated Sites.Selected only for SharePoint resources; URL parsing and existing Outlook scopes are covered by tests.",
+      "verification": "Completed 2026-09-01: 19 package tests and tsc --noEmit pass; canonical immutable IDs reject mutable URLs, foreign origins, malformed paths, query strings, and encoded path confusion."
+    },
+    {
+      "id": "S4",
+      "title": "Implement SharePoint Graph adapter",
+      "status": "complete",
+      "dependsOn": ["S3"],
+      "acceptance": "Typed adapter confines calls to bound IDs and handles metadata, libraries, paging, search, bounded content, auth retry, throttling, safe redirects, and redacted errors.",
+      "verification": "Completed 2026-09-01: package tests and tsc --noEmit pass; assigned-site URL resolution and returned URLs are confined; library discovery avoids tenant search; paging/search cursors are bound; byte reads are capped; bearer tokens do not reach download hosts; denial/throttling/malformed responses are covered."
+    },
+    {
+      "id": "S5",
+      "title": "Ship read-only document and folder Gatekeeper",
+      "status": "complete",
+      "dependsOn": ["S4"],
+      "acceptance": "Document/folder reads are resource-confined, observation-authorized, strategy-B verified with observer-owned tokens, and selectable through a narrow configurator.",
+      "verification": "Completed 2026-09-01: Node and workerd suites prove canonical dispatch/rejection, authorization-before-return including empty pages, file/folder mismatches, read-only actions, strategy-B observer outcomes, verifier fail-closed classification, and configurator resolution/prefill/edit behavior; full pnpm check passes.",
+      "evidence": {
+        "runtime": "SharePointDocumentSessionImpl and SharePointDocumentGatekeeperImpl",
+        "observer": "MicrosoftVerifier.hasSharePointItemAccess with fail-closed transient error handling",
+        "configurator": "Exact assigned-site URL resolution to canonical immutable resource URL",
+        "migration": "wrangler migration v1 adds SharePointDocumentGatekeeperImpl",
+        "currentValidation": "36 Node tests, 25 workerd tests, package tsc, and full pnpm check pass"
+      }
+    },
+    {
+      "id": "S6",
+      "title": "Evaluate and verify document support",
+      "status": "in_progress",
+      "dependsOn": ["S5"],
+      "acceptance": "Evaluation proves selected assignment, positive/negative users and observers, unassigned-site denial, content bounds, Outlook regressions, Access, and private routes.",
+      "verification": "Deployed by approved production continuations 2026-09-02. Authenticated testing against only os-test now proves folder listing, recursive open(itemId), metadata, and child file content reads. The remaining negative-user, observer, Outlook regression, and private-route matrix is still pending.",
+      "evidence": {
+        "microsoftWorkerVersion": "39c8ebaf-0cbe-4359-89a0-d32410711cc0",
+        "routerVersion": "28897f6b-3ef7-4f8f-8d62-ac500de59ba2",
+        "fixture": "/Shared Documents/test-uploads/os-test/",
+        "liveFinding": "Folder listing, recursive child open, metadata, and hello.txt content read succeed",
+        "deployedFix": "Recursive open(itemId), immutable ancestry confinement, strategy-C item tracking, and Workers-compatible manual download redirects"
+      }
+    },
+    {
+      "id": "S7",
+      "title": "Add site and library capability with strategy C",
+      "status": "blocked",
+      "dependsOn": ["S6"],
+      "acceptance": "Site-wide observations track every revealed item data set and correctly reverify/exclude observers under concurrency and ACL variation.",
+      "verification": "Observer admission-race, multi-item page, revoked-access, rename, delete, retry, and excludeObservers tests."
+    },
+    {
+      "id": "S8",
+      "title": "Add approved SharePoint writes",
+      "status": "blocked_separate_authority_approval",
+      "dependsOn": ["S6"],
+      "acceptance": "Approved create/upload/replace/rename/same-site-move intents cannot execute before applyAction and remain site-confined; delete and sharing stay unavailable.",
+      "verification": "Submit-without-side-effect, apply, reject, stale-eTag, confinement, upload recovery, idempotency, and approval-description tests."
+    },
+    {
+      "id": "S9",
+      "title": "Production deployment and closeout",
+      "status": "blocked_explicit_production_approval",
+      "dependsOn": ["S6"],
+      "acceptance": "Approved production subset is deployed once, fully live-verified, versioned, documented, and paired with current rollback/revocation evidence.",
+      "verification": "Fresh pnpm check, production mutation summary, version inventory, full live operator checklist, and DEPLOYMENT.md update."
+    },
+    {
+      "id": "W0",
+      "title": "Prove Work IQ tenant feasibility",
+      "status": "blocked_by_sharepoint_completion",
+      "dependsOn": ["S9"],
+      "acceptance": "Sanitized report proves licensing, availability, permissions, callback flow, MCP schemas/errors, governance, privacy, and observer-oracle feasibility or records a stop decision.",
+      "verification": "Tenant/admin inspection and isolated protocol evaluation against Microsoft primary documentation."
+    },
+    {
+      "id": "W1",
+      "title": "Approve Work IQ interfaces and package design",
+      "status": "blocked_mandatory_review",
+      "dependsOn": ["W0"],
+      "acceptance": "Operator approves document capability, authority matrix, observer strategy, OAuth separation, McpClient and ToolCatalog seams, and disabled deployment posture.",
+      "verification": "Mandatory write-gatekeeper interface review."
+    },
+    {
+      "id": "W2",
+      "title": "Build and test MCP transport without real credentials",
+      "status": "blocked",
+      "dependsOn": ["W1"],
+      "acceptance": "McpClient handles initialization, Streamable HTTP, SSE, sessions, bounds, redirects, timeouts, IDs, retries, and redaction against fakes.",
+      "verification": "Deterministic MCP transport contract tests using sanitized fixtures."
+    },
+    {
+      "id": "W3",
+      "title": "Implement separate Work IQ OAuth and account state",
+      "status": "blocked",
+      "dependsOn": ["W2"],
+      "acceptance": "PKCE/resource-audience OAuth is tenant/server-pinned, rotation-safe, separately stored, and impossible to confuse with Graph credentials/accounts.",
+      "verification": "OAuth metadata, callback, replay, rotation, redirect-origin, token-separation, and redaction tests."
+    },
+    {
+      "id": "W4",
+      "title": "Add schema-gated read-only document scenarios",
+      "status": "blocked",
+      "dependsOn": ["W3"],
+      "acceptance": "Only locally approved SharePoint/Word scenarios are exposed; schema drift fails closed; document reads are selected-resource confined and observation-authorized.",
+      "verification": "Tool catalog fixtures, drift/unknown-tool tests, configurator round-trip, observation tests, and isolated live reads."
+    },
+    {
+      "id": "W5",
+      "title": "Add optional deployment integration",
+      "status": "blocked_trust_boundary_approval",
+      "dependsOn": ["W4"],
+      "acceptance": "Disabled configuration produces no Worker/bindings; enabled configuration produces one private Worker at the exact callback path and correct deployment order.",
+      "verification": "Deployment-config tests and full pnpm check in disabled and enabled variants."
+    },
+    {
+      "id": "W6",
+      "title": "Evaluate Work IQ and decide whether to continue",
+      "status": "blocked",
+      "dependsOn": ["W5"],
+      "acceptance": "Written go/no-go decision compares Work IQ with direct Graph using live evidence for authority, reliability, privacy, governance, latency, and schema stability.",
+      "verification": "Isolated evaluation deployment and documented decision."
+    },
+    {
+      "id": "W7",
+      "title": "Optionally add approved Work IQ writes",
+      "status": "blocked_by_go_decision_and_authority_review",
+      "dependsOn": ["W6"],
+      "acceptance": "Only approved document creation/comment scenarios use typed pending actions and apply-time schema validation; destructive/expansive tools remain unavailable.",
+      "verification": "Approval, rejection, idempotency, schema-drift, and no-immediate-side-effect tests."
+    }
+  ],
+  "outOfScope": [
+    "App-only production Graph authority",
+    "Tenant-wide SharePoint discovery",
+    "Broad Sites or Files All scopes",
+    "Runtime selected-grant administration",
+    "OneDrive personal drives in Graph v1",
+    "Generic lists and schemas in Graph v1",
+    "Sharing, labels, permissions, cross-site moves, and delete in initial SharePoint delivery",
+    "Generic Graph or MCP pass-through interfaces",
+    "Work IQ production dependency while preview",
+    "Graph and Work IQ credential reuse"
+  ]
+}

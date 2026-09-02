@@ -16,9 +16,17 @@ export const OUTLOOK_CALENDAR_RESOURCE: SupportedResource = {
   grantable: true,
 };
 
+export const SHAREPOINT_DOCUMENT_RESOURCE: SupportedResource = {
+  urlPattern: "https://sharepoint.microsoft.com/site/:siteId/drive/:driveId/item/:itemId",
+  title: "SharePoint File or Folder",
+  description: "Read one file or browse and search within one folder on an approved SharePoint site.",
+  grantable: true,
+};
+
 export const RESOURCE_SCOPES: { resource: SupportedResource; scopes: string[] }[] = [
   { resource: OUTLOOK_MAIL_RESOURCE, scopes: ["https://graph.microsoft.com/Mail.ReadWrite"] },
   { resource: OUTLOOK_CALENDAR_RESOURCE, scopes: ["https://graph.microsoft.com/Calendars.ReadWrite"] },
+  { resource: SHAREPOINT_DOCUMENT_RESOURCE, scopes: ["https://graph.microsoft.com/Sites.Selected"] },
 ];
 
 export const SUPPORTED_RESOURCES: SupportedResource[] = RESOURCE_SCOPES.map(entry => entry.resource);

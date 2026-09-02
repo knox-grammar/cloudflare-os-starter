@@ -91,6 +91,8 @@ pnpm check
 pnpm deploy
 ```
 
+Every check and deploy verifies that `cloudflare-os/` is checked out at this repository's reviewed gitlink, so a stale or manually advanced submodule cannot be shipped accidentally. Deploys deliberately do not fetch or follow upstream `main`; upgrades remain explicit reviews because upstream changes can include storage migrations and incompatible Worker contracts.
+
 With resource values left as `null`, Wrangler creates the three KV namespaces and R2 bucket automatically and reconnects them on later deploys. Set explicit IDs or a bucket name when the deployment must reuse existing resources.
 
 A Workers AI model catalog is enabled by default and needs no API token: the Workshop reaches AI Gateway over its `WORKERS_AI` binding, which is pre-authenticated inside your account. See [AI models](docs/customization.md#ai-models) to add providers, change the gateway, or turn the catalog off.

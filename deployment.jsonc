@@ -22,10 +22,10 @@
     "scheduler": { "name": "knox-os-scheduler" },
     "customGatekeeper": { "name": "knox-os-gatekeeper" },
 
-    // Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar). See
-    // packages/gatekeeper-microsoft/ and plans/gatekeeper-microsoft.md. Verified free
-    // 2026-08-25. NOT YET LIVE-TESTED: no CLIENT_ID/CLIENT_SECRET installed, and the resource
-    // configurator UI is unbuilt, so connecting an account isn't usable yet even once deployed.
+    // Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar, and selected SharePoint
+    // files/folders). See packages/gatekeeper-microsoft/ and
+    // plans/microsoft-sharepoint-and-work-iq.md. Outlook and read-only SharePoint access to the
+    // administrator-selected digital-utilities site are live; broader authority remains deferred.
     "gatekeeperMicrosoft": { "name": "knox-os-gatekeeper-microsoft" },
 
     "errorReporter": { "name": "knox-os-error-reporter" }

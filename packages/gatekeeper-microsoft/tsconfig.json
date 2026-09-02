@@ -1,5 +1,5 @@
 {
-  "extends": "../../cloudflare-os/tsconfig.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ESNext"],

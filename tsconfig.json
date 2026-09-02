@@ -1,10 +1,8 @@
-// Base compiler options for this repository's own code. The two `packages/*` tsconfigs extend the
-// submodule's root config instead, so upstream stays the single source of truth for the settings a
-// Worker package needs; this file exists for `scripts/`, which no package tsconfig includes.
-//
-// `singleThreaded` is deliberately absent: it is a TypeScript 7 option, and unlike the submodule's
-// root config nothing here type-checks capnweb's recursive type graphs, so the parallel default is
-// fine.
+// Base compiler options for this repository's own code. Most `packages/*` tsconfigs extend the
+// submodule's root config so upstream stays the source of truth for Worker settings. Packages that
+// need compatibility with editor language servers older than TypeScript 7 may extend this equivalent
+// base instead; it deliberately omits TS7-only `singleThreaded`. The parallel default is acceptable
+// for those smaller wrapper packages and for `scripts/`.
 {
   "compilerOptions": {
     "target": "ES2022",

@@ -25,6 +25,10 @@
         "OutlookMailGatekeeperImpl",
         "OutlookCalendarGatekeeperImpl"
       ]
+    },
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SharePointDocumentGatekeeperImpl"]
     }
   ],
 
@@ -32,7 +36,8 @@
   // TENANT_ID is not a secret. CLIENT_ID and CLIENT_SECRET are, and are installed with
   // `wrangler secret put` against this Worker -- never written here or in deployment.jsonc.
   "vars": {
-    "TENANT_ID": "3b951541-2eca-412c-9d5f-ffb43008c700"
+    "TENANT_ID": "3b951541-2eca-412c-9d5f-ffb43008c700",
+    "SHAREPOINT_ASSIGNED_SITE_URL": "https://knoxnswedu.sharepoint.com/sites/digital-utilities"
   },
 
   "observability": {

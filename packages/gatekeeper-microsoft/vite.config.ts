@@ -45,7 +45,7 @@ export default {
         output: ['dist/**'],
       },
       test: {
-        command: 'vitest run',
+        command: 'vitest run && vitest run -c vitest.worker.config.ts',
         input: [{ auto: true }, ownDist, ownWranglerValidate],
         output: [{ auto: true }, ownDist, ownWranglerValidate],
       },

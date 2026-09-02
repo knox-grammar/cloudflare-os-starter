@@ -714,10 +714,31 @@ function deployWorker(dir: string, extraArgs: string[]): void {
   }
 }
 
+export function assertSubmoduleCommit(expected: string, checkedOut: string): void {
+  if (expected !== checkedOut) {
+    throw new Error(
+      `cloudflare-os is checked out at ${checkedOut}, but this deployment pins ${expected}. ` +
+      "Run git submodule update --init before checking or deploying. Advance the gitlink only " +
+      "through the reviewed upgrade workflow; deploys never pull a moving branch automatically.");
+  }
+}
+
+function gitOutput(args: string[], cwd = root): string {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr.trim() || "unknown error"}`);
+  }
+  return result.stdout.trim();
+}
+
 function requireSubmodule(): void {
   if (!existsSync(join(root, "cloudflare-os/package.json"))) {
     throw new Error("CloudflareOS submodule is not initialized. Run git submodule update --init.");
   }
+  const expected = gitOutput(["rev-parse", "HEAD:cloudflare-os"]);
+  const checkedOut = gitOutput(["rev-parse", "HEAD"], join(root, "cloudflare-os"));
+  assertSubmoduleCommit(expected, checkedOut);
 }
 
 function build(config: DeploymentConfig): void {

@@ -17,6 +17,7 @@ import {
 import {
   authorizeEndpoint,
   exchangeAuthCode,
+  pkceChallenge,
   refreshAccessToken,
   getMicrosoftAccountDescription,
   getMicrosoftVerifiedEmail,
@@ -35,15 +36,18 @@ import {
   IDENTITY_SCOPES,
   OUTLOOK_CALENDAR_RESOURCE,
   OUTLOOK_MAIL_RESOURCE,
+  SHAREPOINT_DOCUMENT_RESOURCE,
   resourceUrlPatternsToOAuthScopes,
   SUPPORTED_RESOURCES,
 } from "./microsoft-scopes";
 import {
   OutlookCalendarConfiguratorUI,
   OutlookMailConfiguratorUI,
+  SharePointDocumentConfiguratorUI,
 } from "./microsoft-configurators";
 import OUTLOOK_CALENDAR_CONFIGURATOR_HTML from "./generated/outlook-calendar-configurator-ui.txt";
 import OUTLOOK_MAIL_CONFIGURATOR_HTML from "./generated/outlook-mail-configurator-ui.txt";
+import SHAREPOINT_DOCUMENT_CONFIGURATOR_HTML from "./generated/sharepoint-document-configurator-ui.txt";
 import type {
   Cursor,
   OutlookMailSession,
@@ -56,7 +60,20 @@ import type {
   NewCalendarEvent,
   CalendarEventUpdate,
   FreeSlot,
+  SharePointDocumentSession,
+  SharePointItemMetadata,
+  SharePointItemPage,
 } from "./types";
+import { SharePointApi, SharePointGraphError } from "./sharepoint-api";
+import {
+  SharePointObserverTracker,
+  type SharePointObservationCheck,
+} from "./sharepoint-observers";
+import {
+  formatSharePointDocumentResource,
+  parseSharePointDocumentResource,
+  type SharePointDocumentResource,
+} from "./sharepoint-resources";
 import TYPES_CODE from "./types.txt";
 import MICROSOFT_LOGO_SVG from "./microsoft-logo.svg";
 
@@ -90,6 +107,7 @@ type Env = Cloudflare.Env & {
   TENANT_ID: string;
   CLIENT_ID?: string;
   CLIENT_SECRET?: string;
+  SHAREPOINT_ASSIGNED_SITE_URL: string;
 };
 
 function getBaseUrl(env: Env) {
@@ -129,6 +147,7 @@ type StoredNonce = {
   value: string;
   expiresAt: number;
   stage: "initiation" | "oauth";
+  codeVerifier?: string;
 };
 
 // ===========================================================================================
@@ -251,6 +270,8 @@ export default {
       newUrl.searchParams.set("response_mode", "query");
       newUrl.searchParams.set("scope", begun.scopes.join(" "));
       newUrl.searchParams.set("state", `${doId}:${begun.oauthNonce}`);
+      newUrl.searchParams.set("code_challenge", await pkceChallenge(begun.codeVerifier));
+      newUrl.searchParams.set("code_challenge_method", "S256");
 
       return Response.redirect(newUrl.toString(), 302);
     } else if (relPath === "/oauth") {
@@ -299,11 +320,11 @@ export class GatekeeperVendor extends WorkerEntrypoint<Env> implements Gatekeepe
       url: "https://microsoft.com",
       logo: { url: MICROSOFT_LOGO_URL },
       color: "#f3f2f1",
-      tagline: "Read email, draft replies, and manage a calendar",
+      tagline: "Work with Outlook and approved SharePoint documents",
       description:
-          "Connect your Microsoft 365 account to give Cloudflare OS access to your Outlook " +
-          "mailbox and calendar. Build agents that triage email, draft replies for you to send, " +
-          "find meeting times, and manage calendar events.",
+          "Connect your Microsoft 365 account to give Cloudflare OS access to Outlook mail and " +
+          "calendar, plus approved SharePoint files and folders. Build agents that triage email, " +
+          "draft replies, manage calendar events, and read selected documents.",
       providesAuth: true,
     };
   }
@@ -392,29 +413,36 @@ export class UserAccount extends DurableObject<Env> {
     return grantedResourcesFromScopes(granted);
   }
 
-  async beginOAuthFlow(initiationNonce: string): Promise<{ oauthNonce: string; scopes: string[] } | null> {
+  async beginOAuthFlow(initiationNonce: string): Promise<{
+    oauthNonce: string;
+    codeVerifier: string;
+    scopes: string[];
+  } | null> {
     let stored = this.ctx.storage.kv.get<StoredNonce>("nonce");
     if (!stored || stored.stage !== "initiation" ||
         Date.now() >= stored.expiresAt || !constantTimeEqual(stored.value, initiationNonce)) {
       return null;
     }
     let oauthNonce = generateNonce();
+    let codeVerifier = generateNonce();
     this.ctx.storage.kv.put<StoredNonce>("nonce", {
       value: oauthNonce,
       expiresAt: Date.now() + OAUTH_NONCE_LIFETIME_MS,
       stage: "oauth",
+      codeVerifier,
     });
     let scopes = this.ctx.storage.kv.get<string[]>("requestedScopes") ?? resourceUrlPatternsToOAuthScopes();
-    return { oauthNonce, scopes };
+    return { oauthNonce, codeVerifier, scopes };
   }
 
   async acceptAuthCode(code: string, oauthNonce: string): Promise<boolean> {
     let stored = this.ctx.storage.kv.get<StoredNonce>("nonce");
-    if (!stored || stored.stage !== "oauth" ||
+    if (!stored || stored.stage !== "oauth" || !stored.codeVerifier ||
         Date.now() >= stored.expiresAt || !constantTimeEqual(stored.value, oauthNonce)) {
       return false;
     }
     this.ctx.storage.kv.delete("nonce");
+    let codeVerifier = stored.codeVerifier;
 
     let { CLIENT_ID: clientId, CLIENT_SECRET: clientSecret, TENANT_ID: tenantId } = this.env;
     if (!clientId || !clientSecret) {
@@ -429,7 +457,7 @@ export class UserAccount extends DurableObject<Env> {
 
       let response = await exchangeAuthCode(
           tenantId, code, clientId, clientSecret, getBaseUrl(this.env) + "/oauth",
-          AbortSignal.timeout(AUTH_CODE_EXCHANGE_TIMEOUT_MS));
+          codeVerifier, AbortSignal.timeout(AUTH_CODE_EXCHANGE_TIMEOUT_MS));
 
       this.ctx.storage.kv.put<string>("refreshToken", response.refreshToken);
       this.ctx.storage.kv.put<MicrosoftAccessToken>("accessToken", response.accessToken);
@@ -516,6 +544,9 @@ export class UserAccount extends DurableObject<Env> {
         throw new Error("Microsoft credentials changed while refreshing. Please try again.");
       }
 
+      if (result.refreshToken) {
+        this.ctx.storage.kv.put<string>("refreshToken", result.refreshToken);
+      }
       this.ctx.storage.kv.put<MicrosoftAccessToken>("accessToken", result.token);
       return result.token;
     });
@@ -592,6 +623,17 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
     resource: SupportedResource;
   }> {
     let parsed = new URL(url);
+    if (parsed.origin === "https://sharepoint.microsoft.com") {
+      let resource = parseSharePointDocumentResource(url);
+      let props: SharePointDocumentGatekeeperImplProps = {
+        userObjectId: this.ctx.props.userObjectId,
+        ...resource,
+      };
+      return {
+        class: this.ctx.exports.SharePointDocumentGatekeeperImpl({ props }),
+        resource: SHAREPOINT_DOCUMENT_RESOURCE,
+      };
+    }
     if (parsed.hostname !== "outlook.office.com") {
       throw new Error(`Unsupported Microsoft resource URL: ${url}`);
     }
@@ -650,6 +692,14 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
       };
     }
 
+    if (resourceUrlPattern === SHAREPOINT_DOCUMENT_RESOURCE.urlPattern) {
+      return {
+        iframeHtml: SHAREPOINT_DOCUMENT_CONFIGURATOR_HTML,
+        ui: new RpcStub(new SharePointDocumentConfiguratorUI(
+          getToken, this.env.SHAREPOINT_ASSIGNED_SITE_URL)),
+      };
+    }
+
     throw new Error(`Unsupported resource configurator type: ${resourceUrlPattern}`);
   }
 
@@ -678,11 +728,8 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
   }
 
   /**
-   * Both Outlook Mail and Outlook Calendar use observer strategy A (private-only, see the plan
-   * doc): addObserver always throws on both, so this verifier is minted but never consulted. It
-   * still needs a real public method -- an empty WorkerEntrypoint is never registered in
-   * `ctx.exports` -- so it exposes a no-op, matching the write-gatekeeper skill's guidance for a
-   * verifier with no strategy-B/C consumer.
+   * Outlook Mail and Calendar use private-only strategy A. SharePoint uses this verifier for an
+   * exact-item strategy-B check with the observer's own delegated credentials.
    */
   async getVerifier(): Promise<Fetcher<GatekeeperUserVerifier>> {
     let props: MicrosoftVerifierProps = { userObjectId: this.ctx.props.userObjectId };
@@ -691,8 +738,8 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
 }
 
 // ===========================================================================================
-// Verifier -- both resources currently use strategy A, so this exists only to satisfy the
-// mandatory getVerifier()/addObserver() contract. Revisit if calendar sharing becomes strategy B.
+// Verifier -- a no-op token for strategy-A Outlook resources and an exact-item access oracle for
+// the strategy-B SharePoint document resource.
 // ===========================================================================================
 
 type MicrosoftVerifierProps = {
@@ -701,11 +748,207 @@ type MicrosoftVerifierProps = {
 
 export interface MicrosoftVerifierApi extends GatekeeperUserVerifier {
   verify(): Promise<void>;
+  hasSharePointItemAccess(siteId: string, driveId: string, itemId: string): Promise<boolean>;
 }
 
 export class MicrosoftVerifier extends WorkerEntrypoint<Env, MicrosoftVerifierProps>
     implements MicrosoftVerifierApi {
   async verify(): Promise<void> {}
+
+  async hasSharePointItemAccess(siteId: string, driveId: string, itemId: string): Promise<boolean> {
+    let id = this.ctx.exports.UserAccount.idFromString(this.ctx.props.userObjectId);
+    let account = this.ctx.exports.UserAccount.get(id);
+    let api = new SharePointApi(async opts => (await account.getAccessToken(opts)).token);
+    try {
+      await api.getItem({ siteId, driveId, itemId });
+      return true;
+    } catch (error) {
+      if (error instanceof SharePointGraphError && [401, 403, 404].includes(error.status)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+}
+
+// ===========================================================================================
+// SharePoint
+// ===========================================================================================
+
+type SharePointDocumentGatekeeperImplProps = {
+  userObjectId: string;
+  siteId: string;
+  driveId: string;
+  itemId: string;
+};
+
+type SharePointDocumentSessionContext = {
+  api: SharePointApi;
+  rootResource: SharePointDocumentResource;
+  resource: SharePointDocumentResource;
+  approvalQueue: RpcStub<ApprovalQueue>;
+  observe(itemIds: string[]): Promise<SharePointObservationCheck>;
+};
+
+async function authorizeSharePointObservation(
+  ctx: SharePointDocumentSessionContext,
+  itemIds: string[],
+  description: { title: string; description: string },
+): Promise<void> {
+  let check = await ctx.observe(itemIds);
+  await ctx.approvalQueue.authorizeObservation({
+    ...description,
+    excludeObservers: check.excludeObservers,
+  });
+  check.commit();
+}
+
+export class SharePointDocumentSessionImpl extends RpcTarget
+    implements SharePointDocumentSession {
+  #ctx: SharePointDocumentSessionContext;
+
+  constructor(ctx: SharePointDocumentSessionContext) {
+    super();
+    this.#ctx = ctx;
+  }
+
+  [Symbol.dispose]() {
+    this.#ctx.approvalQueue[Symbol.dispose]();
+  }
+
+  async metadata(): Promise<SharePointItemMetadata> {
+    let item = await this.#ctx.api.getItem(this.#ctx.resource);
+    await authorizeSharePointObservation(this.#ctx, [item.id], {
+      title: sanitizeApprovalTitle(`Read SharePoint metadata: ${item.name}`),
+      description: `Read metadata for the bound SharePoint ${item.kind}.`,
+    });
+    return item;
+  }
+
+  async listChildren(options?: { cursor?: string; limit?: number }): Promise<SharePointItemPage> {
+    let bound = await this.#ctx.api.getItem(this.#ctx.resource);
+    if (bound.kind !== "folder") throw new Error("Cannot list children of a SharePoint file.");
+    let page = await this.#ctx.api.listChildren(this.#ctx.resource, options);
+    await authorizeSharePointObservation(
+      this.#ctx, [bound.id, ...page.items.map(item => item.id)], {
+        title: sanitizeApprovalTitle(`Browse SharePoint folder: ${bound.name}`),
+        description: `Read ${page.items.length} direct child item(s) from the bound folder.`,
+      });
+    return page;
+  }
+
+  async search(
+    query: string,
+    options?: { cursor?: string; limit?: number },
+  ): Promise<SharePointItemPage> {
+    let bound = await this.#ctx.api.getItem(this.#ctx.resource);
+    if (bound.kind !== "folder") throw new Error("Cannot search beneath a SharePoint file.");
+    let page = await this.#ctx.api.search(this.#ctx.resource, query, options);
+    await authorizeSharePointObservation(
+      this.#ctx, [bound.id, ...page.items.map(item => item.id)], {
+        title: sanitizeApprovalTitle(`Search SharePoint folder: ${bound.name}`),
+        description: `Read ${page.items.length} result(s) from a search beneath the bound folder.\n\n` +
+          formatApprovalField("Search", query),
+      });
+    return page;
+  }
+
+  async open(itemId: string): Promise<SharePointDocumentSession> {
+    let item = await this.#ctx.api.getItem(this.#ctx.resource);
+    if (item.kind !== "folder") throw new Error("Cannot open an item beneath a SharePoint file.");
+    let resource = await this.#ctx.api.assertDescendant(this.#ctx.rootResource, itemId);
+    return new SharePointDocumentSessionImpl({
+      ...this.#ctx,
+      resource,
+      approvalQueue: this.#ctx.approvalQueue.dup(),
+    });
+  }
+
+  async read(options?: { offset?: number; length?: number }): Promise<ArrayBuffer> {
+    let item = await this.#ctx.api.getItem(this.#ctx.resource);
+    if (item.kind !== "file") throw new Error("Cannot read bytes from a SharePoint folder.");
+    let bytes = await this.#ctx.api.read(this.#ctx.resource, options);
+    await authorizeSharePointObservation(this.#ctx, [item.id], {
+      title: sanitizeApprovalTitle(`Read SharePoint file: ${item.name}`),
+      description: `Read ${bytes.byteLength} byte(s) from the bound SharePoint file.`,
+    });
+    return bytes;
+  }
+}
+
+export class SharePointDocumentGatekeeperImpl
+    extends DurableObject<Env, SharePointDocumentGatekeeperImplProps>
+    implements Gatekeeper<SharePointDocumentSession> {
+  #tokens = new AccessTokenCache(opts => {
+    let account = this.ctx.exports.UserAccount.get(
+      this.ctx.exports.UserAccount.idFromString(this.ctx.props.userObjectId));
+    return account.getAccessToken(opts);
+  });
+
+  #resource(): SharePointDocumentResource {
+    return {
+      siteId: this.ctx.props.siteId,
+      driveId: this.ctx.props.driveId,
+      itemId: this.ctx.props.itemId,
+    };
+  }
+
+  #api(): SharePointApi {
+    return new SharePointApi(opts => this.#tokens.get(opts));
+  }
+
+  #observers(): SharePointObserverTracker {
+    let resource = this.#resource();
+    return new SharePointObserverTracker(
+      this.ctx.storage.kv, resource.siteId, resource.driveId);
+  }
+
+  async describe(): Promise<ResourceDescription> {
+    let item = await this.#api().getItem(this.#resource());
+    return {
+      url: formatSharePointDocumentResource(this.#resource()),
+      title: item.name,
+      snippet: `SharePoint ${item.kind}: ${item.name}`,
+      suggestedBindingName: item.kind === "folder" ? "SHAREPOINT_FOLDER" : "SHAREPOINT_FILE",
+      tsType: "SharePointDocumentSession",
+    };
+  }
+
+  async getTypeScriptTypes(): Promise<string> { return TYPES_CODE; }
+  async getAutoApprovableActions() { return []; }
+
+  async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<SharePointDocumentSession> {
+    let resource = this.#resource();
+    return new SharePointDocumentSessionImpl({
+      api: this.#api(),
+      rootResource: resource,
+      resource,
+      approvalQueue: approvalQueue.dup(),
+      observe: itemIds => this.#observers().prepareObservation(itemIds),
+    });
+  }
+
+  async applyAction(_actionId: number): Promise<void> {
+    throw new Error("SharePoint document connections are read-only.");
+  }
+  async rejectAction(_actionId: number): Promise<void> {
+    throw new Error("SharePoint document connections are read-only.");
+  }
+  async revertAction(_actionId: number): Promise<void> {
+    throw new Error("SharePoint document connections are read-only.");
+  }
+
+  async addObserver(_id: string, user: Fetcher<GatekeeperUserVerifier>): Promise<void> {
+    let verifier = user as unknown as Fetcher<MicrosoftVerifierApi>;
+    let resource = this.#resource();
+    if (!await verifier.hasSharePointItemAccess(
+      resource.siteId, resource.driveId, resource.itemId)) {
+      throw new Error("This collaborator cannot access the bound SharePoint file or folder.");
+    }
+    await this.#observers().addObserver(_id, verifier);
+  }
+
+  async removeObserver(id: string): Promise<void> { this.#observers().removeObserver(id); }
 }
 
 // ===========================================================================================
