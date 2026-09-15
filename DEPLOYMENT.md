@@ -74,19 +74,28 @@ skill before customizing or enabling it for real use.
 
 ## Current version IDs (last-known-good)
 
-Recorded after the production continuation deploy, 2026-09-02 (recursive SharePoint
-folder reads and the Cloudflare Workers download-redirect compatibility fix live for the
-selected `digital-utilities` site; `CLIENT_ID` and `CLIENT_SECRET` verified present by name):
+Recorded after the production upgrade, 2026-09-15 (Cloudflare OS `2e37d67f`, including in-place
+Workshop git-storage migration on first workspace wake). Worker version rollback of
+`knox-os-workshop` after a workspace has woken is unsafe.
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `28897f6b-3ef7-4f8f-8d62-ac500de59ba2` |
-| `knox-os-workshop` | `1ef330be-ac6f-4842-a27d-53eb41300d53` |
-| `knox-os-context` | `19a6ea72-8da6-42ec-9004-06a22b2c70f3` |
-| `knox-os-scheduler` | `e4d402f5-1b96-432d-903d-88f3409ab2aa` |
-| `knox-os-gatekeeper` | `ac05bccf-2db4-401b-abd3-bf5f31806c35` |
-| `knox-os-gatekeeper-microsoft` | `39c8ebaf-0cbe-4359-89a0-d32410711cc0` |
-| `knox-os-error-reporter` | `81b995e8-1e16-4b78-9f1c-cce381c98941` |
+| `knox-os` | `a08d55fd-dffb-4987-b644-0609c22e8a66` |
+| `knox-os-workshop` | `814d97dc-e969-4287-b40e-9d376766fad3` |
+| `knox-os-context` | `e2a5e30b-cc43-47b5-a11c-9e5874377ca7` |
+| `knox-os-scheduler` | `64476f2b-f3d6-419d-aa92-899776c7b325` |
+| `knox-os-gatekeeper` | `ecb4e4ce-9047-4fe0-afa3-a8fbf2ecb05c` |
+| `knox-os-gatekeeper-microsoft` | `64adf588-920a-475c-ae1c-b2efcf2ba138` |
+| `knox-os-error-reporter` | `9d090dcc-916d-414c-a890-6765c15ebc56` |
+
+Immediate pre-OS-upgrade rollback targets (2026-09-02; Workshop storage may already be
+migrated): `knox-os` `28897f6b-3ef7-4f8f-8d62-ac500de59ba2`, `knox-os-workshop`
+`1ef330be-ac6f-4842-a27d-53eb41300d53`, `knox-os-context`
+`19a6ea72-8da6-42ec-9004-06a22b2c70f3`, `knox-os-scheduler`
+`e4d402f5-1b96-432d-903d-88f3409ab2aa`, `knox-os-gatekeeper`
+`ac05bccf-2db4-401b-abd3-bf5f31806c35`, `knox-os-gatekeeper-microsoft`
+`39c8ebaf-0cbe-4359-89a0-d32410711cc0`, `knox-os-error-reporter`
+`81b995e8-1e16-4b78-9f1c-cce381c98941`.
 
 Immediate pre-redirect-fix rollback targets (2026-09-02): `knox-os`
 `c9c2ef12-46ff-4372-bccb-35fb62b12693`, `knox-os-workshop`
