@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "catalog:",
+    "@gadgets/scripts": "workspace:*",
     "@types/node": "26.1.0",
     "typescript": "catalog:",
     "vite": "catalog:",
