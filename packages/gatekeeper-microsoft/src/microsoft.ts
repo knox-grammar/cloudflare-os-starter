@@ -10,6 +10,7 @@ import {
   VendorDescription,
   GatekeeperConnectCallback,
   GatekeeperConnectOptions,
+  ConnectHandoff,
   AccountDescription,
   SupportedResource,
   ResourceConfiguratorFrame,
@@ -27,9 +28,12 @@ import {
   MailApi,
   CalendarApi,
   MicrosoftAccessToken,
+  MicrosoftOAuthGrant,
   GraphMessage,
   GraphEvent,
 } from "./microsoft-api";
+import { commitStagedCredentials, stageCredentials } from "@gadgets/gatekeeper-kit/credential-stage";
+import { connectHandoffPageHtml, htmlResponse } from "@gadgets/gatekeeper-kit/connect-pages";
 import { AccessTokenCache, AccessTokenRequest } from "./auth-retry";
 import {
   grantedResourcesFromScopes,
@@ -77,8 +81,6 @@ import {
 import TYPES_CODE from "./types.txt";
 import MICROSOFT_LOGO_SVG from "./microsoft-logo.svg";
 
-const VENDOR_ID = "microsoft";
-
 const NONCE_BYTES = 32;
 const INITIATION_NONCE_LIFETIME_MS = 10 * 60 * 1000;
 const OAUTH_NONCE_LIFETIME_MS = 10 * 60 * 1000;
@@ -118,14 +120,6 @@ function getBasePath(env: Env) {
   const path = new URL(getBaseUrl(env)).pathname;
   return path === "/" ? "" : path;
 }
-
-const SELF_CLOSING_HTML = `<!DOCTYPE html>
-<html lang="en">
-  <body>
-    <script type="text/javascript">window.close();</script>
-    <p>Authorization complete. You may close this tab and return to the Gadgets Workshop.
-  </body>
-</html>`;
 
 const INVALID_LINK_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -292,12 +286,11 @@ export default {
 
       let userObjectId = ctx.exports.UserAccount.idFromString(doId);
       let stub: DurableObjectStub<UserAccount> = ctx.exports.UserAccount.get(userObjectId);
-      if (!await stub.acceptAuthCode(code, oauthNonce)) {
-        return new Response(INVALID_LINK_HTML, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
+      let handoff = await stub.acceptAuthCode(code, oauthNonce);
+      if (!handoff) {
+        return htmlResponse(INVALID_LINK_HTML);
       }
-      return new Response(SELF_CLOSING_HTML, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      return htmlResponse(connectHandoffPageHtml(handoff));
     } else {
       return new Response("Not Found", { status: 404 });
     }
@@ -435,11 +428,11 @@ export class UserAccount extends DurableObject<Env> {
     return { oauthNonce, codeVerifier, scopes };
   }
 
-  async acceptAuthCode(code: string, oauthNonce: string): Promise<boolean> {
+  async acceptAuthCode(code: string, oauthNonce: string): Promise<ConnectHandoff | null> {
     let stored = this.ctx.storage.kv.get<StoredNonce>("nonce");
     if (!stored || stored.stage !== "oauth" || !stored.codeVerifier ||
         Date.now() >= stored.expiresAt || !constantTimeEqual(stored.value, oauthNonce)) {
-      return false;
+      return null;
     }
     this.ctx.storage.kv.delete("nonce");
     let codeVerifier = stored.codeVerifier;
@@ -449,43 +442,56 @@ export class UserAccount extends DurableObject<Env> {
       throw new Error("The Microsoft Gatekeeper is not configured.");
     }
 
-    let completion = await this.#updateCredentials(async () => {
-      let callback = this.ctx.storage.kv.get<Fetcher<GatekeeperConnectCallback>>("callback");
-      if (!callback) {
-        throw new Error("Took too long to complete the authorization. Please try again.");
-      }
+    let callback = this.ctx.storage.kv.get<Fetcher<GatekeeperConnectCallback>>("callback");
+    if (!callback) {
+      throw new Error("Took too long to complete the authorization. Please try again.");
+    }
 
-      let response = await exchangeAuthCode(
-          tenantId, code, clientId, clientSecret, getBaseUrl(this.env) + "/oauth",
-          codeVerifier, AbortSignal.timeout(AUTH_CODE_EXCHANGE_TIMEOUT_MS));
+    let grant = await exchangeAuthCode(
+        tenantId, code, clientId, clientSecret, getBaseUrl(this.env) + "/oauth",
+        codeVerifier, AbortSignal.timeout(AUTH_CODE_EXCHANGE_TIMEOUT_MS));
 
-      this.ctx.storage.kv.put<string>("refreshToken", response.refreshToken);
-      this.ctx.storage.kv.put<MicrosoftAccessToken>("accessToken", response.accessToken);
+    let reconnecting = !!this.ctx.storage.kv.get<boolean>("reconnecting");
+    if (reconnecting) {
+      // Reconnect URLs are bearer capabilities. Stage the grant until the Workshop confirms the
+      // completing browser is the owner's; bound gadgets keep reading the live tokens meanwhile.
+      let stageId = stageCredentials(this.ctx.storage.kv, grant, Date.now());
+      return await callback.reconnectComplete(stageId);
+    }
+
+    return await this.#updateCredentials(async () => {
+      this.ctx.storage.kv.put<string>("refreshToken", grant.refreshToken);
+      this.ctx.storage.kv.put<MicrosoftAccessToken>("accessToken", grant.accessToken);
       this.#mintFailure = undefined;
-      this.ctx.storage.kv.put<string[]>("grantedScopes", response.grantedScopes);
+      this.ctx.storage.kv.put<string[]>("grantedScopes", grant.grantedScopes);
       this.ctx.storage.kv.delete("requestedScopes");
-
-      let reconnecting = this.ctx.storage.kv.get<boolean>("reconnecting");
-      if (reconnecting) this.ctx.storage.kv.delete("reconnecting");
-      return { callback, reconnecting: !!reconnecting };
-    });
-
-    let callback = completion.callback;
-    if (completion.reconnecting) {
-      await callback.credentialsRestored();
-    } else {
       try {
         let props: MicrosoftUserImplProps = { userObjectId: this.ctx.id.toString() };
-        await callback.complete(this.ctx.exports.MicrosoftUserImpl({ props }));
+        let handoff = await callback.complete(this.ctx.exports.MicrosoftUserImpl({ props }));
+        if (this.ctx.storage.kv.get<boolean>("ephemeral")) {
+          this.ctx.storage.setAlarm(Date.now() + 2 * 60 * 1000);
+        }
+        return handoff;
       } catch (err) {
         this.ctx.storage.kv.delete("refreshToken");
         throw err;
       }
-      if (this.ctx.storage.kv.get<boolean>("ephemeral")) {
-        this.ctx.storage.setAlarm(Date.now() + 2 * 60 * 1000);
-      }
-    }
-    return true;
+    });
+  }
+
+  /** Makes the grant staged under `stageId` live; see GatekeeperUser.commitReconnect. */
+  async commitReconnect(stageId: string): Promise<void> {
+    await this.#updateCredentials(async () => {
+      let grant = commitStagedCredentials<MicrosoftOAuthGrant>(
+        this.ctx.storage.kv, Date.now(), stageId);
+      if (!grant) throw new Error("No reconnect is awaiting confirmation. Please try again.");
+      this.ctx.storage.kv.put<string>("refreshToken", grant.refreshToken);
+      this.ctx.storage.kv.put<MicrosoftAccessToken>("accessToken", grant.accessToken);
+      this.#mintFailure = undefined;
+      this.ctx.storage.kv.put<string[]>("grantedScopes", grant.grantedScopes);
+      this.ctx.storage.kv.delete("requestedScopes");
+      this.ctx.storage.kv.delete("reconnecting");
+    });
   }
 
   hasRefreshToken() {
@@ -713,6 +719,10 @@ export class MicrosoftUserImpl extends WorkerEntrypoint<Env, MicrosoftUserImplPr
     let requestedScopes = resourceUrlPatternsToOAuthScopes(await account.getGrantedResourceUrlPatterns());
     await account.prepareReconnect(initiationNonce, requestedScopes);
     return { url: `${getBaseUrl(this.env)}/${this.ctx.props.userObjectId}/${initiationNonce}` };
+  }
+
+  async commitReconnect(stageId: string): Promise<void> {
+    await this.#account().commitReconnect(stageId);
   }
 
   async ensureResources(resourceUrlPatterns: string[]): Promise<{ url?: string }> {
@@ -1495,7 +1505,7 @@ class OutlookCalendarSessionImpl extends RpcTarget implements OutlookCalendarSes
     let busy = events
         .filter(e => e.showAs !== "free")
         .map(e => ({ start: new Date(e.start.dateTime + "Z"), end: new Date(e.end.dateTime + "Z") }))
-        .sort((a, b) => a.start.valueOf() - b.start.valueOf());
+        .toSorted((a, b) => a.start.valueOf() - b.start.valueOf());
 
     let slots: FreeSlot[] = [];
     let cursor = from;

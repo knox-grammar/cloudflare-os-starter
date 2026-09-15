@@ -213,10 +213,6 @@ const WELL_KNOWN_FOLDERS = new Set([
   "inbox", "archive", "drafts", "sentitems", "deleteditems", "junkemail",
 ]);
 
-function toEmailAddress(a: GraphEmailAddress | undefined): { name?: string; address: string } {
-  return a ? { name: a.name, address: a.address } : { address: "" };
-}
-
 /**
  * Very light HTML→plain-text conversion for message bodies. Strips tags and decodes the common
  * entities Outlook actually emits; it does not attempt to preserve structure (lists, links,

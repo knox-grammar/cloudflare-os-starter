@@ -6,6 +6,9 @@ packages:
   - cloudflare-os/packages/configurator-ui
   # configurator-ui and error-reporting now depend on @gadgets/scripts (workspace:*).
   - cloudflare-os/scripts
+  # Microsoft OAuth reconnect uses gatekeeper-kit credential staging and connect handoff pages.
+  - cloudflare-os/packages/backend-utils
+  - cloudflare-os/packages/gatekeeper-kit
   - packages/*
 
 # Mirror of cloudflare-os/pnpm-workspace.yaml's catalog. Required, not merely tidy: the two
