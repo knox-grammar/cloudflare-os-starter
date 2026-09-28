@@ -171,24 +171,39 @@ export function assertStagingIsolation(staging: DeploymentConfig, production: De
       new Set(stagingResources).size !== stagingResources.length) {
     throw new Error("Staging storage binding overlaps an explicitly pinned production resource.");
   }
-  if (staging.aiGateway.enabled &&
+  const shared = staging.staging;
+  if (!shared || typeof shared.sharedProductionMicrosoft !== "boolean" ||
+      typeof shared.sharedProductionAiGateway !== "boolean" ||
+      typeof shared.releaseReady !== "boolean") {
+    throw new Error("Staging must explicitly declare shared-service authority and release readiness.");
+  }
+  if (!staging.microsoft || shared.sharedProductionMicrosoft !== staging.microsoft.enabled) {
+    throw new Error("Staging Microsoft configuration disagrees with approved sharing mode.");
+  }
+  if (shared.sharedProductionAiGateway) {
+    if (!staging.aiGateway.enabled || staging.aiGateway.name !== production.aiGateway.name ||
+        staging.aiGateway.accountId !== production.aiGateway.accountId ||
+        JSON.stringify(staging.aiGateway.providers) !== JSON.stringify(production.aiGateway.providers)) {
+      throw new Error("Shared staging AI Gateway must match production exactly.");
+    }
+  } else if (staging.aiGateway.enabled &&
       (staging.aiGateway.name === production.aiGateway.name ||
        staging.aiGateway.accountId != null &&
        staging.aiGateway.accountId.toLowerCase() !== staging.accountId.toLowerCase() ||
        staging.aiGateway.providers?.some((provider) => provider !== "cloudflare"))) {
     throw new Error("Staging AI Gateway must be separate, same-account and cloudflare-only.");
   }
-  if (!staging.microsoft) {
-    throw new Error("Staging must explicitly disable or override Microsoft tenant and site authority.");
-  }
 }
 
 export function assertMicrosoftIsolation(
-  staging: ProdWranglerConfig, production: ProdWranglerConfig,
+  staging: ProdWranglerConfig, production: ProdWranglerConfig, shareProduction: boolean,
 ): void {
   for (const field of ["TENANT_ID", "SHAREPOINT_ASSIGNED_SITE_URL"] as const) {
-    if (staging.vars?.[field] !== undefined && staging.vars[field] === production.vars?.[field]) {
-      throw new Error(`Staging Microsoft ${field} overlaps production.`);
+    const stageValue = staging.vars?.[field];
+    const productionValue = production.vars?.[field];
+    if (shareProduction ? stageValue === undefined || stageValue !== productionValue
+                        : stageValue !== undefined && stageValue === productionValue) {
+      throw new Error(`Staging Microsoft ${field} disagrees with approved sharing mode.`);
     }
   }
 }
@@ -907,16 +922,17 @@ async function main(): Promise<void> {
     errorReporter: await readJsonc(join(root, packageDirs.errorReporter, "wrangler.jsonc")),
   };
   const generated = generateConfigs(config, bases);
-  if (target === "production" && config.microsoft !== undefined) {
-    throw new Error("microsoft overrides are staging-only; production retains its reviewed base config.");
+  if (target === "production" && (config.microsoft !== undefined || config.staging !== undefined)) {
+    throw new Error("Staging overrides cannot alter the reviewed production config.");
   }
   if (target === "staging") {
     const production = await readDeployment(join(root, "deployment.jsonc"));
     assertStagingIsolation(config, production);
     assertMicrosoftIsolation(generated.gatekeeperMicrosoft,
-      generateConfigs(production, bases).gatekeeperMicrosoft);
-    if (!check && (!config.microsoft?.enabled || !config.aiGateway.enabled)) {
-      throw new Error("Staging deploy needs approved test Microsoft and AI settings; dry-run only for now.");
+      generateConfigs(production, bases).gatekeeperMicrosoft,
+      config.staging!.sharedProductionMicrosoft);
+    if (!check && !config.staging!.releaseReady) {
+      throw new Error("Staging deploy is blocked until Access, OAuth and shared-service preflight passes.");
     }
   }
   reportAiGateway(config);

@@ -145,12 +145,16 @@ test("staging keeps all seven Workers and data bindings away from production", a
   assert.equal(stage.workshop.vars!.PUBLIC_BASE_URL, "https://os-staging.knoxi.dev");
   assert.equal(sharingDomain(stage), "https://os-staging.knoxi.dev");
   assert.deepEqual(stage.workshop.migrations, prod.workshop.migrations);
-  assert.equal(stage.gatekeeperMicrosoft.vars!.TENANT_ID, undefined);
-  assert.equal(stage.gatekeeperMicrosoft.vars!.SHAREPOINT_ASSIGNED_SITE_URL, undefined);
+  assert.equal(stage.gatekeeperMicrosoft.vars!.TENANT_ID,
+    prod.gatekeeperMicrosoft.vars!.TENANT_ID);
+  assert.equal(stage.gatekeeperMicrosoft.vars!.SHAREPOINT_ASSIGNED_SITE_URL,
+    prod.gatekeeperMicrosoft.vars!.SHAREPOINT_ASSIGNED_SITE_URL);
+  assert.equal(stage.workshop.vars!.CF_AI_GATEWAY, "default");
+  assert.equal(stage.workshop.vars!.CF_AI_GATEWAY, prod.workshop.vars!.CF_AI_GATEWAY);
   assert.equal(stage.gatekeeperMicrosoft.vars!.BASE_URL,
     "https://os-staging.knoxi.dev/gatekeeper/microsoft");
   assert.doesNotThrow(() => assertMicrosoftIsolation(stage.gatekeeperMicrosoft,
-    prod.gatekeeperMicrosoft));
+    prod.gatekeeperMicrosoft, true));
   for (const [key, worker] of Object.entries(stage)) {
     assert.equal(worker.preview_urls, false, `${key} has a public preview URL`);
     if (key !== "router") {
@@ -178,6 +182,8 @@ test("staging refuses production trust, resource and Microsoft authority", async
     (c: DeploymentConfig) => { c.access.admins.push("other@example.com"); },
     (c: DeploymentConfig) => { c.context.sharingDomain = "https://os.knoxi.dev"; },
     (c: DeploymentConfig) => { c.resources.blueprintContentBucket = "shared-bucket"; },
+    (c: DeploymentConfig) => { c.staging!.sharedProductionMicrosoft = false; },
+    (c: DeploymentConfig) => { c.staging!.sharedProductionAiGateway = false; },
   ]) {
     const config = altered(mutate);
     if (config.resources.blueprintContentBucket === "shared-bucket") {
@@ -196,15 +202,21 @@ test("staging refuses production trust, resource and Microsoft authority", async
     };
   });
   const bases = await baseConfigs();
-  assert.doesNotThrow(() => assertMicrosoftIsolation(
+  assert.throws(() => assertMicrosoftIsolation(
     generateConfigs(enabled, bases).gatekeeperMicrosoft,
-    generateConfigs(production, bases).gatekeeperMicrosoft));
+    generateConfigs(production, bases).gatekeeperMicrosoft, true),
+    /TENANT_ID disagrees with approved sharing mode/);
   enabled.microsoft!.tenantId = production.workers.gatekeeperMicrosoft.name;
   assert.throws(() => validateConfig(enabled), /tenant UUID/);
   enabled.microsoft!.tenantId = "3b951541-2eca-412c-9d5f-ffb43008c700";
+  enabled.microsoft!.assignedSiteUrl = "https://knoxnswedu.sharepoint.com/sites/digital-utilities";
+  assert.doesNotThrow(() => assertMicrosoftIsolation(
+    generateConfigs(enabled, bases).gatekeeperMicrosoft,
+    generateConfigs(production, bases).gatekeeperMicrosoft, true));
   assert.throws(() => assertMicrosoftIsolation(
     generateConfigs(enabled, bases).gatekeeperMicrosoft,
-    generateConfigs(production, bases).gatekeeperMicrosoft), /TENANT_ID overlaps production/);
+    generateConfigs(production, bases).gatekeeperMicrosoft, false),
+    /TENANT_ID disagrees with approved sharing mode/);
 });
 
 test("requires the reviewed cloudflare-os gitlink", () => {

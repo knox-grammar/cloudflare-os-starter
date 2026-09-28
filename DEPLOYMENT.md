@@ -195,13 +195,23 @@ back; stop and inspect remote state before retrying.
 `pnpm check:staging` runs tests, builds and seven Wrangler dry-runs without touching Cloudflare;
 CI runs it after `pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
 
-`pnpm deploy:staging` currently **fails before remote mutation**: the non-production Entra
-application/test SharePoint site and the staging AI Gateway/budget/logging are not approved.
-The staging config disables both model catalog and Microsoft authority; its generated Microsoft
-Worker has neither the production `TENANT_ID` nor the production SharePoint site var. Do not
-install production OAuth secrets on a staging Worker. To enable staging later, approve the exact
-tenant, test site, OAuth redirect/scopes/secrets and AI Gateway policy, then use a separately
-protected staging deployment workflow. See
+Staging shares two external services with production **by explicit operator approval**:
+the Entra app/tenant/assigned SharePoint site, and the `default` AI Gateway (including its
+billing and logging policy). Worker identities and persisted storage remain separate. Only
+the staging Microsoft Worker may receive the existing OAuth app credentials, and its OAuth
+redirect must be separately registered as
+`https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`. Microsoft OAuth accesses real
+mail, calendar and assigned-site data; approved mail/calendar actions can change real data.
+
+`pnpm deploy:staging` still **fails before remote mutation** while `staging.releaseReady` is
+false. Before changing that reviewed flag, restrict the **whole staging Access application**
+to `carrickm@knox.nsw.edu.au` (its current Allow policy covers several people), independently
+verify a denied identity and no Bypass, register and check the exact OAuth redirect, plan the
+Worker-scoped secret bootstrap without exposing values or accidentally deploying a public
+Router, and agree on safe read-only Microsoft tests plus an AI spend/logging limit. The
+ordinary Gatekeeper is available by default to any allowed user, so `/admin` alone is **not**
+an adequate account restriction. Keep the separate staging deployment workflow protected.
+See
 [`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
 existing-data rehearsal, negative Access checks and the production release gate.
 

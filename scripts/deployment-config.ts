@@ -125,6 +125,12 @@ export interface DeploymentConfig {
     tenantId?: string;
     assignedSiteUrl?: string;
   };
+  /** Explicit staging-only exception for shared external services; never shared Worker/storage state. */
+  staging?: {
+    sharedProductionMicrosoft: boolean;
+    sharedProductionAiGateway: boolean;
+    releaseReady: boolean;
+  };
   aiGateway: AiGatewayConfigInput;
   context: ContextConfig;
   /** Agent code-mode defaults that are deployment policy, not per-user guesses. */
