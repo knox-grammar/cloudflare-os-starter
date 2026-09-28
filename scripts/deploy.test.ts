@@ -5,9 +5,11 @@ import { parse, type ParseError } from "jsonc-parser";
 import {
   aiGatewayPlan,
   assertMicrosoftIsolation,
+  assertStagingDeploymentReady,
   assertStagingIsolation,
   assertSubmoduleCommit,
   buildCommands,
+  deploymentOrder,
   generateConfigs,
   parseDeploymentArgs,
   validateConfig,
@@ -118,12 +120,42 @@ async function deploymentFile(path: string): Promise<DeploymentConfig> {
   return config;
 }
 
-test("selects staging explicitly and rejects unknown deploy flags", () => {
-  assert.deepEqual(parseDeploymentArgs([]), { target: "production", check: false });
+test("selects staging and private bootstrap explicitly", () => {
+  assert.deepEqual(parseDeploymentArgs([]),
+    { target: "production", check: false, bootstrap: false });
   assert.deepEqual(parseDeploymentArgs(["--target", "staging", "--check"]),
-    { target: "staging", check: true });
+    { target: "staging", check: true, bootstrap: false });
+  assert.deepEqual(parseDeploymentArgs(["--bootstrap", "--target", "staging", "--check"]),
+    { target: "staging", check: true, bootstrap: true });
+  assert.throws(() => parseDeploymentArgs(["--bootstrap"]), /only available for staging/);
+  assert.throws(() => parseDeploymentArgs(["--bootstrap", "--target", "staging", "--bootstrap"]),
+    /Unsupported deploy argument/);
   assert.throws(() => parseDeploymentArgs(["--target", "production"]), /Unsupported deploy argument/);
   assert.throws(() => parseDeploymentArgs(["--check", "--check"]), /Unsupported deploy argument/);
+});
+
+test("private bootstrap excludes Router while full deploy keeps it last", async () => {
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  assert.equal(staging.staging!.bootstrapReady, false);
+  assert.equal(staging.staging!.releaseReady, false);
+  assert.throws(() => assertStagingDeploymentReady(staging, true), /separate provisioning approval/);
+  assert.throws(() => assertStagingDeploymentReady(staging, false), /blocked until Access/);
+  const enabled = structuredClone(staging);
+  enabled.staging!.bootstrapReady = true;
+  assert.doesNotThrow(() => assertStagingDeploymentReady(enabled, true));
+  enabled.staging!.releaseReady = true;
+  assert.throws(() => assertStagingDeploymentReady(enabled, false), /Pin all four/);
+  enabled.context.kvNamespaceId = "stage-context-kv";
+  enabled.resources.blueprintsKvNamespaceId = "stage-blueprints-kv";
+  enabled.resources.avatarsKvNamespaceId = "stage-avatars-kv";
+  enabled.resources.blueprintContentBucket = "stage-blueprint-bucket";
+  assert.doesNotThrow(() => assertStagingDeploymentReady(enabled, false));
+  assert.deepEqual(deploymentOrder(staging, true), [
+    "errorReporter", "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+  ]);
+  assert.deepEqual(deploymentOrder(staging, false), [
+    ...deploymentOrder(staging, true), "router",
+  ]);
 });
 
 test("staging keeps all seven Workers and data bindings away from production", async () => {

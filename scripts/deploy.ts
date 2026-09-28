@@ -100,17 +100,23 @@ export function publicOrigin(config: DeploymentConfig): string {
 
 export type DeploymentTarget = "production" | "staging";
 
-export function parseDeploymentArgs(args: string[]): { target: DeploymentTarget; check: boolean } {
+export function parseDeploymentArgs(args: string[]):
+    { target: DeploymentTarget; check: boolean; bootstrap: boolean } {
   let target: DeploymentTarget = "production";
   let check = false;
+  let bootstrap = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--check" && !check) check = true;
+    else if (args[i] === "--bootstrap" && !bootstrap) bootstrap = true;
     else if (args[i] === "--target" && args[i + 1] === "staging" && target === "production") {
       target = "staging";
       i++;
     } else throw new Error(`Unsupported deploy argument: ${args[i]}`);
   }
-  return { target, check };
+  if (bootstrap && target !== "staging") {
+    throw new Error("Private bootstrap is only available for staging.");
+  }
+  return { target, check, bootstrap };
 }
 
 /** Staging is a separate set of service identities, not a production config with a new route. */
@@ -174,6 +180,7 @@ export function assertStagingIsolation(staging: DeploymentConfig, production: De
   const shared = staging.staging;
   if (!shared || typeof shared.sharedProductionMicrosoft !== "boolean" ||
       typeof shared.sharedProductionAiGateway !== "boolean" ||
+      typeof shared.bootstrapReady !== "boolean" ||
       typeof shared.releaseReady !== "boolean") {
     throw new Error("Staging must explicitly declare shared-service authority and release readiness.");
   }
@@ -903,8 +910,32 @@ function reportAiGateway(config: DeploymentConfig): void {
     `--name ${config.workers.workshop.name}\n`);
 }
 
+export function assertStagingDeploymentReady(config: DeploymentConfig, bootstrap: boolean): void {
+  if (bootstrap && !config.staging?.bootstrapReady) {
+    throw new Error("Private staging bootstrap needs separate provisioning approval.");
+  }
+  if (!bootstrap && !config.staging?.releaseReady) {
+    throw new Error("Staging deploy is blocked until Access, OAuth and shared-service preflight passes.");
+  }
+  if (!bootstrap && [
+    config.context.kvNamespaceId, config.resources.blueprintsKvNamespaceId,
+    config.resources.avatarsKvNamespaceId, config.resources.blueprintContentBucket,
+  ].some((resource) => !resource)) {
+    throw new Error("Pin all four staging storage identities before releasing the public Router.");
+  }
+}
+
+export function deploymentOrder(config: DeploymentConfig, bootstrap: boolean):
+    (keyof GeneratedConfigs)[] {
+  return [
+    ...(config.errorReporting.enabled ? ["errorReporter" as const] : []),
+    "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+    ...(!bootstrap ? ["router" as const] : []),
+  ];
+}
+
 async function main(): Promise<void> {
-  const { target, check } = parseDeploymentArgs(process.argv.slice(2));
+  const { target, check, bootstrap } = parseDeploymentArgs(process.argv.slice(2));
   requireSubmodule();
   const config = await readDeployment(join(root,
     target === "staging" ? "deployment.staging.jsonc" : "deployment.jsonc"));
@@ -931,9 +962,7 @@ async function main(): Promise<void> {
     assertMicrosoftIsolation(generated.gatekeeperMicrosoft,
       generateConfigs(production, bases).gatekeeperMicrosoft,
       config.staging!.sharedProductionMicrosoft);
-    if (!check && !config.staging!.releaseReady) {
-      throw new Error("Staging deploy is blocked until Access, OAuth and shared-service preflight passes.");
-    }
+    if (!check) assertStagingDeploymentReady(config, bootstrap);
   }
   reportAiGateway(config);
 
@@ -946,16 +975,11 @@ async function main(): Promise<void> {
     if (check) run(["test"]);
     build(config);
     const deployArgs = check ? ["--dry-run"] : [];
-    if (config.errorReporting.enabled) {
-      deployWorker(packageDirs.errorReporter, deployArgs);
+    // Bootstrap provisions only private Workers and their new storage. The Router is never
+    // deployed until IDs are pinned and the separately reviewed release gate is opened.
+    for (const key of deploymentOrder(config, bootstrap)) {
+      deployWorker(packageDirs[key], deployArgs);
     }
-    deployWorker(packageDirs.context, deployArgs);
-    deployWorker(packageDirs.scheduler, deployArgs);
-    deployWorker(packageDirs.customGatekeeper, deployArgs);
-    deployWorker(packageDirs.gatekeeperMicrosoft, deployArgs);
-    deployWorker(packageDirs.workshop, deployArgs);
-    // Last: it binds every one of the above.
-    deployWorker(packageDirs.router, deployArgs);
   } finally {
     await Promise.all(Object.values(generatedPaths).map((path) => rm(path, { force: true })));
   }

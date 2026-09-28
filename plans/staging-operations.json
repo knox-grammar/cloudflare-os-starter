@@ -14,8 +14,8 @@
       "id": "target-aware-wrapper",
       "status": "in-progress",
       "dependsOn": ["approve-boundaries"],
-      "acceptance": "Production and staging share one generator and deploy order; target assertions reject all cross-environment names, routes, Access audiences, sharing boundaries and storage IDs",
-      "verification": "Initial wrapper committed as e83da8b and hosted dry-run CI passed; shared-service exception requires updated local tests, lint, two dry-runs and separate review before commit"
+      "acceptance": "Production and staging share one generator; target assertions reject cross-environment Worker/storage/Access identities; bootstrap deploy order excludes Router and release requires four pinned resource IDs",
+      "verification": "Initial wrapper e83da8b and shared-service exception 67a23fd passed hosted CI. Private bootstrap command and gate require local and hosted dry-runs and separate provisioning approval."
     },
     {
       "id": "staging-workflow",

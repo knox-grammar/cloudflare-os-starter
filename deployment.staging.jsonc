@@ -39,7 +39,9 @@
   "staging": {
     "sharedProductionMicrosoft": true,
     "sharedProductionAiGateway": true,
-    // Requires a reviewed Access policy, OAuth redirect, credential bootstrap and go/no-go.
+    // Private-only provisioning needs separate approval; never exposes the Router.
+    "bootstrapReady": false,
+    // Public release requires Access, OAuth, secret and resource-ID preflight.
     "releaseReady": false
   },
   "context": {

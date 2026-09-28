@@ -193,7 +193,8 @@ back; stop and inspect remote state before retrying.
 `os-staging.knoxi.dev`, with its own Access AUD and only `carrickm@knox.nsw.edu.au` in
 `/admin`. The wrapper uses **one** config generator/build/deploy order for both targets.
 `pnpm check:staging` runs tests, builds and seven Wrangler dry-runs without touching Cloudflare;
-CI runs it after `pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
+`pnpm check:staging:bootstrap` dry-runs only the six private Workers. CI runs both after
+`pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
 
 Staging shares two external services with production **by explicit operator approval**:
 the Entra app/tenant/assigned SharePoint site, and the `default` AI Gateway (including its
@@ -203,8 +204,14 @@ redirect must be separately registered as
 `https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`. Microsoft OAuth accesses real
 mail, calendar and assigned-site data; approved mail/calendar actions can change real data.
 
-`pnpm deploy:staging` still **fails before remote mutation** while `staging.releaseReady` is
-false. The operator approved the existing select staging Access group, which includes
+Both live commands are **blocked before remote mutation**. After separate provisioning
+approval, change only `staging.bootstrapReady` in the reviewed config, then
+`pnpm deploy:staging:bootstrap` can create six **private** Workers and four new KV/R2
+resources; it never deploys the Router. Record and pin all four generated storage IDs/names,
+then separately review the OAuth credential bootstrap and public release. `pnpm deploy:staging`
+requires `staging.releaseReady: true` **and** all four storage identities pinned, even if
+bootstrap already passed. A passing dry-run is not provisioning or public-release approval.
+The operator approved the existing select staging Access group, which includes
 `carrickm@knox.nsw.edu.au`, while `/admin` remains exclusive to that address. Before
 changing the reviewed flag, independently confirm the application's exact Allow group,
 hostname, IdP and absence of Bypass/Everyone, and verify an allowed member and a denied
@@ -212,7 +219,8 @@ identity. Register and check the exact OAuth redirect, plan the Worker-scoped se
 without exposing values or accidentally deploying a public Router, and agree on read-only
 Microsoft tests and an AI spend/logging limit. **Every allowed member can connect their own
 real Microsoft account** because the ordinary Gatekeeper is enabled by default; `/admin`
-alone does not restrict connector access. Keep the staging deployment workflow protected.
+alone does not restrict connector access. `pnpm secrets:set` targets production, **never**
+use it for staging. Keep the staging deployment workflow protected.
 See
 [`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
 existing-data rehearsal, negative Access checks and the production release gate.

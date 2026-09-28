@@ -129,6 +129,7 @@ export interface DeploymentConfig {
   staging?: {
     sharedProductionMicrosoft: boolean;
     sharedProductionAiGateway: boolean;
+    bootstrapReady: boolean;
     releaseReady: boolean;
   };
   aiGateway: AiGatewayConfigInput;

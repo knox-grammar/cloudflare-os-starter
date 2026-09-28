@@ -36,3 +36,5 @@ jobs:
         run: pnpm check
       - name: Check staging deployment (dry-run only)
         run: pnpm check:staging
+      - name: Check private staging bootstrap (dry-run only)
+        run: pnpm check:staging:bootstrap
