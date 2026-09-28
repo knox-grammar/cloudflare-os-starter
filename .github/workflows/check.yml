@@ -1,0 +1,35 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+          cache: true
+          cache_dependency_path: |
+            pnpm-lock.yaml
+            cloudflare-os/pnpm-lock.yaml
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install both workspaces
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Check deployment (dry-run only)
+        run: pnpm check

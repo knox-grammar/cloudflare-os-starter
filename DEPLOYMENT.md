@@ -74,19 +74,20 @@ skill before customizing or enabling it for real use.
 
 ## Current version IDs (last-known-good)
 
-Recorded after the production upgrade, 2026-09-15 (Cloudflare OS `2e37d67f`, including in-place
-Workshop git-storage migration on first workspace wake). Worker version rollback of
-`knox-os-workshop` after a workspace has woken is unsafe.
+Queried from Cloudflare deployments on 2026-09-28 (these versions were deployed 2026-09-15,
+after the previously recorded `2e37d67f` upgrade). The exact source commit for that later
+deployment was not verified. Worker version rollback of `knox-os-workshop` after a workspace has
+woken is unsafe.
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `a08d55fd-dffb-4987-b644-0609c22e8a66` |
-| `knox-os-workshop` | `814d97dc-e969-4287-b40e-9d376766fad3` |
-| `knox-os-context` | `e2a5e30b-cc43-47b5-a11c-9e5874377ca7` |
-| `knox-os-scheduler` | `64476f2b-f3d6-419d-aa92-899776c7b325` |
-| `knox-os-gatekeeper` | `ecb4e4ce-9047-4fe0-afa3-a8fbf2ecb05c` |
-| `knox-os-gatekeeper-microsoft` | `64adf588-920a-475c-ae1c-b2efcf2ba138` |
-| `knox-os-error-reporter` | `9d090dcc-916d-414c-a890-6765c15ebc56` |
+| `knox-os` | `04afe915-2854-4cac-8ab7-aebf97bb0409` |
+| `knox-os-workshop` | `9168ae14-8827-4ba2-8231-98ba94e0bac3` |
+| `knox-os-context` | `4b8cc05b-f271-4dbc-8483-8061e313ad19` |
+| `knox-os-scheduler` | `2789e162-f904-421e-a91b-312f0b751ce1` |
+| `knox-os-gatekeeper` | `e5861df6-4695-4701-9fd7-ca16bb912ec5` |
+| `knox-os-gatekeeper-microsoft` | `0d7d6316-0582-4c83-bfb6-5247300e7bdb` |
+| `knox-os-error-reporter` | `8dc27e76-176d-4217-9987-817a18efe542` |
 
 Immediate pre-OS-upgrade rollback targets (2026-09-02; Workshop storage may already be
 migrated): `knox-os` `28897f6b-3ef7-4f8f-8d62-ac500de59ba2`, `knox-os-workshop`
@@ -158,6 +159,33 @@ CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad \
   points at, and see
   [`references/upgrade-and-rollback.md`](.agents/skills/cloudflare-os-operator/references/upgrade-and-rollback.md)
   to advance it deliberately.
+
+## GitHub Actions
+
+The Knox fork is `knox-grammar/cloudflare-os-starter`; `cloudflare/cloudflare-os-starter`
+is the upstream source, not the deployment repository. `.github/workflows/check.yml` runs
+`pnpm check` on PRs and `main` without Cloudflare credentials. The separate
+`.github/workflows/deploy.yml` runs **only when manually dispatched on `main`**, requires the
+full approved commit SHA, reruns `pnpm check`, then waits for approval in the `production`
+environment before `pnpm deploy`. The environment is restricted to `main` and currently
+requires approval by `mylescarrick`. Neither merging nor pushing deploys production.
+
+The deploy workflow is **not activated** until an authorized operator creates a scoped
+`CLOUDFLARE_API_TOKEN` as a **production environment secret** in the Knox fork. Never put
+it in a repository secret, tracked file, or chat. Scope it to the Knox account and route and
+verify the actual required Workers/KV/R2/zone permissions; do not grant unrelated accounts.
+No token was installed during the workflow setup. If Microsoft or Workshop secrets are missing
+on a new Worker identity, install them separately by the approved interactive procedure;
+`pnpm deploy` does not provision those secrets.
+
+Before approving a production workflow run, use the operator skill and
+[`plans/cloudflare-os-upgrade-2026-09.md`](plans/cloudflare-os-upgrade-2026-09.md): rehearse
+migration `v3`, verify Access and storage ownership, inventory current deployment versions,
+review the per-Worker rollback matrix and get explicit production mutation approval. The
+workflow's dry-run cannot prove remote ownership or the existing-data migration. After the
+run, record all new version IDs here and verify the live site; a successful Action alone is
+not live verification. A failure partway through the seven Workers is not automatically rolled
+back; stop and inspect remote state before retrying.
 
 ## Routine operations
 
