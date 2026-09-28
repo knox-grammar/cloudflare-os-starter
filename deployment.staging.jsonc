@@ -22,8 +22,8 @@
     "admins": ["carrickm@knox.nsw.edu.au"]
   },
   // Explicit exception: no separate Entra system exists. This is real Knox Graph data, including
-  // writes to mail/calendar after approval. Restrict Access to the operator before installing
-  // CLIENT_ID/CLIENT_SECRET on this Worker; add the staging OAuth redirect to the existing app.
+  // writes to mail/calendar after approval. Verify the approved select Access group and denied
+  // identity before installing CLIENT_ID/CLIENT_SECRET; add the staging OAuth redirect to the app.
   "microsoft": {
     "enabled": true,
     "tenantId": "3b951541-2eca-412c-9d5f-ffb43008c700",

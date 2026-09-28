@@ -204,13 +204,15 @@ redirect must be separately registered as
 mail, calendar and assigned-site data; approved mail/calendar actions can change real data.
 
 `pnpm deploy:staging` still **fails before remote mutation** while `staging.releaseReady` is
-false. Before changing that reviewed flag, restrict the **whole staging Access application**
-to `carrickm@knox.nsw.edu.au` (its current Allow policy covers several people), independently
-verify a denied identity and no Bypass, register and check the exact OAuth redirect, plan the
-Worker-scoped secret bootstrap without exposing values or accidentally deploying a public
-Router, and agree on safe read-only Microsoft tests plus an AI spend/logging limit. The
-ordinary Gatekeeper is available by default to any allowed user, so `/admin` alone is **not**
-an adequate account restriction. Keep the separate staging deployment workflow protected.
+false. The operator approved the existing select staging Access group, which includes
+`carrickm@knox.nsw.edu.au`, while `/admin` remains exclusive to that address. Before
+changing the reviewed flag, independently confirm the application's exact Allow group,
+hostname, IdP and absence of Bypass/Everyone, and verify an allowed member and a denied
+identity. Register and check the exact OAuth redirect, plan the Worker-scoped secret bootstrap
+without exposing values or accidentally deploying a public Router, and agree on read-only
+Microsoft tests and an AI spend/logging limit. **Every allowed member can connect their own
+real Microsoft account** because the ordinary Gatekeeper is enabled by default; `/admin`
+alone does not restrict connector access. Keep the staging deployment workflow protected.
 See
 [`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
 existing-data rehearsal, negative Access checks and the production release gate.

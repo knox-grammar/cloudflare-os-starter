@@ -7,7 +7,7 @@
       "id": "approve-boundaries",
       "status": "pending",
       "dependsOn": [],
-      "acceptance": "Operator approved hostname, Worker names and shared production Microsoft/AI authorities; before deployment confirm operator-only staging Access policy, denied user/no Bypass, Entra staging redirect, safe OAuth secret bootstrap, AI budget/logging, storage provisioning and migration reviewer",
+      "acceptance": "Operator approved hostname, Worker names and shared production Microsoft/AI authorities; before deployment verify exact select staging Access group and a denied user/no Bypass, Entra staging redirect, safe OAuth secret bootstrap, AI budget/logging, storage provisioning and migration reviewer",
       "verification": "Record operator decisions and prove remote name, route, Access and resource ownership without exposing secrets"
     },
     {
@@ -28,7 +28,7 @@
       "id": "baseline-rehearsal",
       "status": "pending",
       "dependsOn": ["staging-workflow"],
-      "acceptance": "Approved baseline code creates pre-existing synthetic staging Durable Objects, KV/R2 data and schedules under stable identities; any OAuth rehearsal uses only the operator's real account with read-only tests",
+      "acceptance": "Approved baseline code creates pre-existing synthetic staging Durable Objects, KV/R2 data and schedules under stable identities; initial OAuth rehearsal uses the operator's real account with read-only tests; other approved Access members can connect their own real accounts",
       "verification": "Capture sanitized pre-upgrade evidence and baseline Worker versions"
     },
     {
