@@ -1,0 +1,49 @@
+{
+  "slug": "staging-operations",
+  "state": "awaiting-decisions",
+  "plan": "plans/staging-operations.md",
+  "tasks": [
+    {
+      "id": "approve-boundaries",
+      "status": "pending",
+      "dependsOn": [],
+      "acceptance": "Operator approves account, staging hostname, seven Worker names, Access policy/audience/admins, four new storage resources, AI budget/logging, Microsoft test authority, and migration reviewers",
+      "verification": "Record operator decisions and prove remote name, route, Access and resource ownership without exposing secrets"
+    },
+    {
+      "id": "target-aware-wrapper",
+      "status": "in-progress",
+      "dependsOn": ["approve-boundaries"],
+      "acceptance": "Production and staging share one generator and deploy order; target assertions reject all cross-environment names, routes, Access audiences, sharing boundaries and storage IDs",
+      "verification": "Local node --test scripts/deploy.test.ts (30 passed), pnpm lint, pnpm check and pnpm check:staging passed; generated-config cleanup confirmed. Pending final review and commit. "
+    },
+    {
+      "id": "staging-workflow",
+      "status": "pending",
+      "dependsOn": ["target-aware-wrapper"],
+      "acceptance": "Staging has its own protected GitHub Environment, account-scoped secret, SHA-gated deploy, recorded versions and no production credential exposure",
+      "verification": "Inspect environment rules and run safe staging dry-run; first deployment requires separate resource approval"
+    },
+    {
+      "id": "baseline-rehearsal",
+      "status": "pending",
+      "dependsOn": ["staging-workflow"],
+      "acceptance": "Approved baseline code creates pre-existing synthetic staging Durable Objects, KV/R2 data, schedules and test Microsoft connection under stable staging identities",
+      "verification": "Capture sanitized pre-upgrade evidence and baseline Worker versions"
+    },
+    {
+      "id": "upgrade-rehearsal",
+      "status": "pending",
+      "dependsOn": ["baseline-rehearsal"],
+      "acceptance": "Exact target SHA updates the existing staging identities and passes migration, auth/privacy, Microsoft, Context, Scheduler, AI and route checks",
+      "verification": "Record seven staging versions, results, unverified cases and storage/privacy specialist sign-off"
+    },
+    {
+      "id": "production-release-gate",
+      "status": "pending",
+      "dependsOn": ["upgrade-rehearsal"],
+      "acceptance": "Same SHA as staging; current production identities and versions, complete per-Worker rollback/forward-repair matrix and explicit mutation approval before workflow dispatch",
+      "verification": "Review DEPLOYMENT.md, operator summary and GitHub production Environment approval; verify live service after deploy"
+    }
+  ]
+}

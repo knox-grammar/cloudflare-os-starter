@@ -187,6 +187,24 @@ run, record all new version IDs here and verify the live site; a successful Acti
 not live verification. A failure partway through the seven Workers is not automatically rolled
 back; stop and inspect remote state before retrying.
 
+## Staging (configuration only, not yet provisioned)
+
+`deployment.staging.jsonc` is a separate seven-Worker config on the approved hostname
+`os-staging.knoxi.dev`, with its own Access AUD and only `carrickm@knox.nsw.edu.au` in
+`/admin`. The wrapper uses **one** config generator/build/deploy order for both targets.
+`pnpm check:staging` runs tests, builds and seven Wrangler dry-runs without touching Cloudflare;
+CI runs it after `pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
+
+`pnpm deploy:staging` currently **fails before remote mutation**: the non-production Entra
+application/test SharePoint site and the staging AI Gateway/budget/logging are not approved.
+The staging config disables both model catalog and Microsoft authority; its generated Microsoft
+Worker has neither the production `TENANT_ID` nor the production SharePoint site var. Do not
+install production OAuth secrets on a staging Worker. To enable staging later, approve the exact
+tenant, test site, OAuth redirect/scopes/secrets and AI Gateway policy, then use a separately
+protected staging deployment workflow. See
+[`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
+existing-data rehearsal, negative Access checks and the production release gate.
+
 ## Routine operations
 
 - **Deploy a config change:** edit `deployment.jsonc`, run `pnpm check`,

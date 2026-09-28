@@ -4,9 +4,12 @@ import test from "node:test";
 import { parse, type ParseError } from "jsonc-parser";
 import {
   aiGatewayPlan,
+  assertMicrosoftIsolation,
+  assertStagingIsolation,
   assertSubmoduleCommit,
   buildCommands,
   generateConfigs,
+  parseDeploymentArgs,
   validateConfig,
 } from "./deploy.ts";
 import type {
@@ -106,6 +109,103 @@ function sharingDomain(generated: GeneratedConfigs): unknown {
   return generated.workshop.services!
     .find((service) => service.binding === "GATEKEEPER_CONTEXT")!.props!.sharingDomain;
 }
+
+async function deploymentFile(path: string): Promise<DeploymentConfig> {
+  const errors: ParseError[] = [];
+  const config = parse(await readFile(new URL(path, import.meta.url), "utf8"),
+    errors, { allowTrailingComma: true }) as DeploymentConfig;
+  assert.deepEqual(errors, []);
+  return config;
+}
+
+test("selects staging explicitly and rejects unknown deploy flags", () => {
+  assert.deepEqual(parseDeploymentArgs([]), { target: "production", check: false });
+  assert.deepEqual(parseDeploymentArgs(["--target", "staging", "--check"]),
+    { target: "staging", check: true });
+  assert.throws(() => parseDeploymentArgs(["--target", "production"]), /Unsupported deploy argument/);
+  assert.throws(() => parseDeploymentArgs(["--check", "--check"]), /Unsupported deploy argument/);
+});
+
+test("staging keeps all seven Workers and data bindings away from production", async () => {
+  const production = await deploymentFile("../deployment.jsonc");
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  assert.doesNotThrow(() => assertStagingIsolation(staging, production));
+  const bases = await baseConfigs();
+  const prod = generateConfigs(production, bases);
+  const stage = generateConfigs(staging, bases);
+  const stageNames = new Set(Object.values(stage).map((worker) => worker.name));
+  const prodNames = new Set(Object.values(prod).map((worker) => worker.name));
+  assert.equal(stageNames.size, 7);
+  for (const name of stageNames) assert.equal(prodNames.has(name), false);
+  for (const service of [...stage.router.services!, ...stage.workshop.services!]) {
+    assert.ok(stageNames.has(service.service), `binding ${service.binding} reached ${service.service}`);
+  }
+  assert.deepEqual(stage.router.routes, [{ pattern: "os-staging.knoxi.dev", custom_domain: true }]);
+  assert.equal(stage.workshop.vars!.CF_ACCESS_AUD, staging.access.audience);
+  assert.equal(stage.workshop.vars!.PUBLIC_BASE_URL, "https://os-staging.knoxi.dev");
+  assert.equal(sharingDomain(stage), "https://os-staging.knoxi.dev");
+  assert.deepEqual(stage.workshop.migrations, prod.workshop.migrations);
+  assert.equal(stage.gatekeeperMicrosoft.vars!.TENANT_ID, undefined);
+  assert.equal(stage.gatekeeperMicrosoft.vars!.SHAREPOINT_ASSIGNED_SITE_URL, undefined);
+  assert.equal(stage.gatekeeperMicrosoft.vars!.BASE_URL,
+    "https://os-staging.knoxi.dev/gatekeeper/microsoft");
+  assert.doesNotThrow(() => assertMicrosoftIsolation(stage.gatekeeperMicrosoft,
+    prod.gatekeeperMicrosoft));
+  for (const [key, worker] of Object.entries(stage)) {
+    assert.equal(worker.preview_urls, false, `${key} has a public preview URL`);
+    if (key !== "router") {
+      assert.equal(worker.workers_dev, false);
+      assert.equal(worker.routes, undefined);
+    }
+  }
+  for (const kv of [...stage.workshop.kv_namespaces!, ...stage.context.kv_namespaces!]) {
+    assert.equal(kv.id, undefined);
+  }
+  assert.equal(stage.workshop.r2_buckets![0].bucket_name, undefined);
+});
+
+test("staging refuses production trust, resource and Microsoft authority", async () => {
+  const production = await deploymentFile("../deployment.jsonc");
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  const altered = (mutate: (config: DeploymentConfig) => void) => {
+    const config = structuredClone(staging);
+    mutate(config);
+    return config;
+  };
+  for (const mutate of [
+    (c: DeploymentConfig) => { c.workers.workshop.name = production.workers.workshop.name; },
+    (c: DeploymentConfig) => { c.access.audience = production.access.audience; },
+    (c: DeploymentConfig) => { c.access.admins.push("other@example.com"); },
+    (c: DeploymentConfig) => { c.context.sharingDomain = "https://os.knoxi.dev"; },
+    (c: DeploymentConfig) => { c.resources.blueprintContentBucket = "shared-bucket"; },
+  ]) {
+    const config = altered(mutate);
+    if (config.resources.blueprintContentBucket === "shared-bucket") {
+      config.context.kvNamespaceId = "shared-bucket";
+    }
+    assert.throws(() => assertStagingIsolation(config, production));
+  }
+  assert.throws(() => validateConfig(altered((c) => {
+    c.microsoft = { enabled: false, tenantId: "3b951541-2eca-412c-9d5f-ffb43008c700" };
+  })), /Disabled Microsoft integration/);
+  const enabled = altered((c) => {
+    c.microsoft = {
+      enabled: true,
+      tenantId: "11111111-2222-3333-4444-555555555555",
+      assignedSiteUrl: "https://example.sharepoint.com/sites/test-site",
+    };
+  });
+  const bases = await baseConfigs();
+  assert.doesNotThrow(() => assertMicrosoftIsolation(
+    generateConfigs(enabled, bases).gatekeeperMicrosoft,
+    generateConfigs(production, bases).gatekeeperMicrosoft));
+  enabled.microsoft!.tenantId = production.workers.gatekeeperMicrosoft.name;
+  assert.throws(() => validateConfig(enabled), /tenant UUID/);
+  enabled.microsoft!.tenantId = "3b951541-2eca-412c-9d5f-ffb43008c700";
+  assert.throws(() => assertMicrosoftIsolation(
+    generateConfigs(enabled, bases).gatekeeperMicrosoft,
+    generateConfigs(production, bases).gatekeeperMicrosoft), /TENANT_ID overlaps production/);
+});
 
 test("requires the reviewed cloudflare-os gitlink", () => {
   assert.doesNotThrow(() => assertSubmoduleCommit("abc123", "abc123"));

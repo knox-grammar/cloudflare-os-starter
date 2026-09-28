@@ -1,0 +1,59 @@
+{
+  // Separate Cloudflare OS staging stack in the existing Knox account. Never reuse production
+  // Worker names: Durable Objects belong to the Worker identity.
+  "accountId": "2ddaede0fbdd479a6bf410a5f1eb76ad",
+  "publicBaseUrl": null,
+  "workers": {
+    "router": {
+      "name": "knox-os-staging",
+      "route": { "customDomain": "os-staging.knoxi.dev" }
+    },
+    "workshop": { "name": "knox-os-staging-workshop" },
+    "context": { "name": "knox-os-staging-context" },
+    "scheduler": { "name": "knox-os-staging-scheduler" },
+    "customGatekeeper": { "name": "knox-os-staging-gatekeeper" },
+    "gatekeeperMicrosoft": { "name": "knox-os-staging-gatekeeper-microsoft" },
+    "errorReporter": { "name": "knox-os-staging-error-reporter" }
+  },
+  // Hostname-based Access app, separate from production. Policy is managed in Zero Trust.
+  "access": {
+    "issuer": "https://knoxgrammar.cloudflareaccess.com",
+    "audience": "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012",
+    "admins": ["carrickm@knox.nsw.edu.au"]
+  },
+  // The upstream Microsoft base config contains Knox production tenant/site values. Disable them
+  // until a non-production Entra app, selected test site and delegated scope have been approved.
+  "microsoft": { "enabled": false },
+  // A separate staging AI gateway, budget and prompt retention still need approval. Until then
+  // the model catalog is intentionally unavailable; staging deployment is blocked by deploy.ts.
+  "aiGateway": { "enabled": false },
+  "context": {
+    // A null sharing domain follows this staging hostname, never the production origin.
+    "sharingDomain": null,
+    "kvNamespaceId": null,
+    "artifacts": { "enabled": false }
+  },
+  "agent": { "timeZone": "Australia/Sydney" },
+  "customGatekeeper": {
+    "name": "Knox staging",
+    "message": "Read-only test deployment information. Do not use real user data."
+  },
+  "errorReporting": {
+    "enabled": true,
+    "environment": "staging",
+    "release": null
+  },
+  // null auto-provisions new Worker-scoped resources only on the approved first staging deploy.
+  // Record and pin the resulting IDs/bucket after provisioning.
+  "resources": {
+    "blueprintsKvNamespaceId": null,
+    "avatarsKvNamespaceId": null,
+    "blueprintContentBucket": null
+  },
+  "observability": {
+    "enabled": true,
+    "headSamplingRate": 1,
+    "logs": { "invocationLogs": false },
+    "traces": { "enabled": false, "headSamplingRate": 0.1 }
+  }
+}
