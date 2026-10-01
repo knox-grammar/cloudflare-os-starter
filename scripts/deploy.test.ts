@@ -144,6 +144,7 @@ test("private bootstrap excludes Router while full deploy keeps it last", async 
   enabled.staging!.bootstrapReady = true;
   assert.doesNotThrow(() => assertStagingDeploymentReady(enabled, true));
   enabled.staging!.releaseReady = true;
+  enabled.context.kvNamespaceId = null;
   assert.throws(() => assertStagingDeploymentReady(enabled, false), /Pin all four/);
   enabled.context.kvNamespaceId = "stage-context-kv";
   enabled.resources.blueprintsKvNamespaceId = "stage-blueprints-kv";
@@ -194,10 +195,12 @@ test("staging keeps all seven Workers and data bindings away from production", a
       assert.equal(worker.routes, undefined);
     }
   }
-  for (const kv of [...stage.workshop.kv_namespaces!, ...stage.context.kv_namespaces!]) {
-    assert.equal(kv.id, undefined);
-  }
-  assert.equal(stage.workshop.r2_buckets![0].bucket_name, undefined);
+  assert.deepEqual(stage.workshop.kv_namespaces!.map((kv) => kv.id), [
+    staging.resources.blueprintsKvNamespaceId, staging.resources.avatarsKvNamespaceId,
+  ]);
+  assert.equal(stage.context.kv_namespaces![0].id, staging.context.kvNamespaceId);
+  assert.equal(stage.workshop.r2_buckets![0].bucket_name,
+    staging.resources.blueprintContentBucket);
 });
 
 test("staging refuses production trust, resource and Microsoft authority", async () => {

@@ -47,7 +47,7 @@
   "context": {
     // A null sharing domain follows this staging hostname, never the production origin.
     "sharingDomain": null,
-    "kvNamespaceId": null,
+    "kvNamespaceId": "2fdcfa2c9f7b4d43be0cd89969add600",
     "artifacts": { "enabled": false }
   },
   "agent": { "timeZone": "Australia/Sydney" },
@@ -60,12 +60,11 @@
     "environment": "staging",
     "release": null
   },
-  // null auto-provisions new Worker-scoped resources only on the approved first staging deploy.
-  // Record and pin the resulting IDs/bucket after provisioning.
+  // Provisioned by the approved private bootstrap; keep stable across staging upgrades.
   "resources": {
-    "blueprintsKvNamespaceId": null,
-    "avatarsKvNamespaceId": null,
-    "blueprintContentBucket": null
+    "blueprintsKvNamespaceId": "a629ea0ee821410a9bf73f15d302dc79",
+    "avatarsKvNamespaceId": "7293853e52d9405fa170b6cb8b18b025",
+    "blueprintContentBucket": "knox-os-staging-workshop-blueprint-content"
   },
   "observability": {
     "enabled": true,
