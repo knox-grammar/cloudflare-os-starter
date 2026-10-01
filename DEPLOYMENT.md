@@ -187,7 +187,13 @@ run, record all new version IDs here and verify the live site; a successful Acti
 not live verification. A failure partway through the seven Workers is not automatically rolled
 back; stop and inspect remote state before retrying.
 
-## Staging (configuration only, not yet provisioned)
+## Staging (deployed, signed-in verification pending)
+
+The approved private bootstrap and subsequent public staging release succeeded. Resource
+identities are pinned in `deployment.staging.jsonc`; both mutation gates are closed again.
+See [`plans/staging-public-release-record.md`](plans/staging-public-release-record.md) for
+version IDs, anonymous Access checks and remaining signed-in verification. No production
+release is authorized by this staging smoke test.
 
 `deployment.staging.jsonc` is a separate seven-Worker config on the approved hostname
 `os-staging.knoxi.dev`, with its own Access AUD and only `carrickm@knox.nsw.edu.au` in
