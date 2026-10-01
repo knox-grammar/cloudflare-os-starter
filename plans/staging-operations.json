@@ -19,10 +19,10 @@
     },
     {
       "id": "staging-workflow",
-      "status": "pending",
+      "status": "in-progress",
       "dependsOn": ["target-aware-wrapper"],
       "acceptance": "Staging has its own protected GitHub Environment, account-scoped secret, SHA-gated deploy, recorded versions and no production credential exposure",
-      "verification": "Inspect environment rules and run safe staging dry-run; first deployment requires separate resource approval"
+      "verification": "Manual main-only exact-SHA workflow and sanitized evidence helper prepared; unit tests and local validation recorded in DEPLOYMENT.md. Staging GitHub Environment is absent, no workflow dispatched; reviewer/main-only rules, dedicated secret, merge and first hosted run remain pending"
     },
     {
       "id": "baseline-rehearsal",
