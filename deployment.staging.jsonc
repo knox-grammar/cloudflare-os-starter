@@ -1,0 +1,75 @@
+{
+  // Separate Cloudflare OS staging stack in the existing Knox account. Never reuse production
+  // Worker names: Durable Objects belong to the Worker identity.
+  "accountId": "2ddaede0fbdd479a6bf410a5f1eb76ad",
+  "publicBaseUrl": null,
+  "workers": {
+    "router": {
+      "name": "knox-os-staging",
+      "route": { "customDomain": "os-staging.knoxi.dev" }
+    },
+    "workshop": { "name": "knox-os-staging-workshop" },
+    "context": { "name": "knox-os-staging-context" },
+    "scheduler": { "name": "knox-os-staging-scheduler" },
+    "customGatekeeper": { "name": "knox-os-staging-gatekeeper" },
+    "gatekeeperMicrosoft": { "name": "knox-os-staging-gatekeeper-microsoft" },
+    "errorReporter": { "name": "knox-os-staging-error-reporter" }
+  },
+  // Hostname-based Access app, separate from production. Policy is managed in Zero Trust.
+  "access": {
+    "issuer": "https://knoxgrammar.cloudflareaccess.com",
+    "audience": "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012",
+    "admins": ["carrickm@knox.nsw.edu.au"]
+  },
+  // Explicit exception: no separate Entra system exists. This is real Knox Graph data, including
+  // writes to mail/calendar after approval. Verify the approved select Access group and denied
+  // identity before installing CLIENT_ID/CLIENT_SECRET; add the staging OAuth redirect to the app.
+  "microsoft": {
+    "enabled": true,
+    "tenantId": "3b951541-2eca-412c-9d5f-ffb43008c700",
+    "assignedSiteUrl": "https://knoxnswedu.sharepoint.com/sites/digital-utilities"
+  },
+  // Explicit exception: shares AI Gateway billing and logging policy with production.
+  "aiGateway": {
+    "enabled": true,
+    "name": "default",
+    "accountId": null,
+    "providers": ["cloudflare"]
+  },
+  "staging": {
+    "sharedProductionMicrosoft": true,
+    "sharedProductionAiGateway": true,
+    // Private-only provisioning needs separate approval; never exposes the Router.
+    "bootstrapReady": false,
+    // Public release requires Access, OAuth, secret and resource-ID preflight.
+    "releaseReady": false
+  },
+  "context": {
+    // A null sharing domain follows this staging hostname, never the production origin.
+    "sharingDomain": null,
+    "kvNamespaceId": "2fdcfa2c9f7b4d43be0cd89969add600",
+    "artifacts": { "enabled": false }
+  },
+  "agent": { "timeZone": "Australia/Sydney" },
+  "customGatekeeper": {
+    "name": "Knox staging",
+    "message": "Read-only test deployment information. Do not use real user data."
+  },
+  "errorReporting": {
+    "enabled": true,
+    "environment": "staging",
+    "release": null
+  },
+  // Provisioned by the approved private bootstrap; keep stable across staging upgrades.
+  "resources": {
+    "blueprintsKvNamespaceId": "a629ea0ee821410a9bf73f15d302dc79",
+    "avatarsKvNamespaceId": "7293853e52d9405fa170b6cb8b18b025",
+    "blueprintContentBucket": "knox-os-staging-workshop-blueprint-content"
+  },
+  "observability": {
+    "enabled": true,
+    "headSamplingRate": 1,
+    "logs": { "invocationLogs": false },
+    "traces": { "enabled": false, "headSamplingRate": 0.1 }
+  }
+}

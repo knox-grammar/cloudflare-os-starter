@@ -119,6 +119,19 @@ export interface DeploymentConfig {
     errorReporter?: { name: string };
   };
   access: AccessConfig;
+  /** Staging-only override; disabled removes the Knox production tenant and SharePoint defaults. */
+  microsoft?: {
+    enabled: boolean;
+    tenantId?: string;
+    assignedSiteUrl?: string;
+  };
+  /** Explicit staging-only exception for shared external services; never shared Worker/storage state. */
+  staging?: {
+    sharedProductionMicrosoft: boolean;
+    sharedProductionAiGateway: boolean;
+    bootstrapReady: boolean;
+    releaseReady: boolean;
+  };
   aiGateway: AiGatewayConfigInput;
   context: ContextConfig;
   /** Agent code-mode defaults that are deployment policy, not per-user guesses. */

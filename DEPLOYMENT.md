@@ -187,6 +187,79 @@ run, record all new version IDs here and verify the live site; a successful Acti
 not live verification. A failure partway through the seven Workers is not automatically rolled
 back; stop and inspect remote state before retrying.
 
+## Staging (deployed, signed-in verification pending)
+
+The approved private bootstrap and subsequent public staging release succeeded. Resource
+identities are pinned in `deployment.staging.jsonc`; both mutation gates are closed again.
+See [`plans/staging-public-release-record.md`](plans/staging-public-release-record.md) for
+version IDs, anonymous Access checks and remaining signed-in verification. No production
+release is authorized by this staging smoke test.
+
+`deployment.staging.jsonc` is a separate seven-Worker config on the approved hostname
+`os-staging.knoxi.dev`, with its own Access AUD and only `carrickm@knox.nsw.edu.au` in
+`/admin`. The wrapper uses **one** config generator/build/deploy order for both targets.
+`pnpm check:staging` runs tests, builds and seven Wrangler dry-runs without touching Cloudflare;
+`pnpm check:staging:bootstrap` dry-runs only the six private Workers. CI runs both after
+`pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
+
+Staging shares two external services with production **by explicit operator approval**:
+the Entra app/tenant/assigned SharePoint site, and the `default` AI Gateway (including its
+billing and logging policy). Worker identities and persisted storage remain separate. Only
+the staging Microsoft Worker may receive the existing OAuth app credentials, and its OAuth
+redirect must be separately registered as
+`https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`. Microsoft OAuth accesses real
+mail, calendar and assigned-site data; approved mail/calendar actions can change real data.
+
+Both live commands are **blocked before remote mutation**. After separate provisioning
+approval, change only `staging.bootstrapReady` in the reviewed config, then
+`pnpm deploy:staging:bootstrap` can create six **private** Workers and four new KV/R2
+resources; it never deploys the Router. Record and pin all four generated storage IDs/names,
+then separately review the OAuth credential bootstrap and public release. `pnpm deploy:staging`
+requires `staging.releaseReady: true` **and** all four storage identities pinned, even if
+bootstrap already passed. A passing dry-run is not provisioning or public-release approval.
+The operator approved the existing select staging Access group, which includes
+`carrickm@knox.nsw.edu.au`, while `/admin` remains exclusive to that address. Before
+changing the reviewed flag, independently confirm the application's exact Allow group,
+hostname, IdP and absence of Bypass/Everyone, and verify an allowed member and a denied
+identity. Register and check the exact OAuth redirect, plan the Worker-scoped secret bootstrap
+without exposing values or accidentally deploying a public Router, and agree on read-only
+Microsoft tests and an AI spend/logging limit. **Every allowed member can connect their own
+real Microsoft account** because the ordinary Gatekeeper is enabled by default; `/admin`
+alone does not restrict connector access. `pnpm secrets:set` targets production, **never**
+use it for staging. Keep the staging deployment workflow protected.
+See
+[`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
+existing-data rehearsal, negative Access checks and the production release gate.
+
+### Manual staging workflow
+
+`.github/workflows/deploy-staging.yml` updates the **existing** staging stack, never bootstraps
+new Workers or installs OAuth credentials. It runs only through manual dispatch on `main`,
+with an exact full SHA matching the selected main commit. Both environments are dry-run
+without credentials before the protected staging deployment job. It never promotes production.
+
+Before first use, separately configure GitHub Environment **`staging`** with a required reviewer,
+exactly one custom deployment branch rule (`main`, type `branch`), and the environment secret
+**`STAGING_CLOUDFLARE_API_TOKEN`**. The workflow fails if reviewer/branch protection is missing;
+the dedicated secret name avoids falling back to the production token. GitHub API inspection
+and these settings have not yet been exercised by a hosted staging deployment. Account-scoped
+Workers tokens are not guaranteed to isolate staging from production Workers, so protect the
+workflow and review its source before approval. No GitHub settings are created by this code.
+
+After the approved workflow is merged into `main`, select **Deploy staging**, enter the selected
+commit's full SHA, and approve the staging Environment job. The helper verifies existing Worker
+deployments, Microsoft secret names and pinned storage before opening the release gate only
+in the runner's temporary config; it restores the original config afterward. Tracked mutation
+gates stay closed. Do not dispatch this workflow from a feature branch.
+
+The job records sanitized current deployment/version IDs and anonymous Access probes in a
+**30-day** artifact, including partial deployment failures. It retains no cookies, redirects,
+response bodies, author emails or deployment annotations. If any deploy or probe fails, stop,
+inventory the seven Workers and review recovery; no automatic retry or rollback. Versions in
+the artifact describe observed account state, not proof that every Worker deployed the requested
+SHA. A canceled run may have no artifact. Signed-in user/admin/Microsoft and persistence checks
+remain manual; a green run is not migration rehearsal or production release approval.
+
 ## Routine operations
 
 - **Deploy a config change:** edit `deployment.jsonc`, run `pnpm check`,

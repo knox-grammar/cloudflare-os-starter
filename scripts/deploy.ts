@@ -98,6 +98,123 @@ export function publicOrigin(config: DeploymentConfig): string {
   return `https://${config.workers.router.route.customDomain!}`;
 }
 
+export type DeploymentTarget = "production" | "staging";
+
+export function parseDeploymentArgs(args: string[]):
+    { target: DeploymentTarget; check: boolean; bootstrap: boolean } {
+  let target: DeploymentTarget = "production";
+  let check = false;
+  let bootstrap = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--check" && !check) check = true;
+    else if (args[i] === "--bootstrap" && !bootstrap) bootstrap = true;
+    else if (args[i] === "--target" && args[i + 1] === "staging" && target === "production") {
+      target = "staging";
+      i++;
+    } else throw new Error(`Unsupported deploy argument: ${args[i]}`);
+  }
+  if (bootstrap && target !== "staging") {
+    throw new Error("Private bootstrap is only available for staging.");
+  }
+  return { target, check, bootstrap };
+}
+
+/** Staging is a separate set of service identities, not a production config with a new route. */
+export function assertStagingIsolation(staging: DeploymentConfig, production: DeploymentConfig): void {
+  validateConfig(staging);
+  validateConfig(production);
+  if (staging.accountId !== production.accountId) {
+    throw new Error("Staging account differs from the approved production account.");
+  }
+  if (staging.workers.router.name !== "knox-os-staging" ||
+      staging.workers.router.route.customDomain !== "os-staging.knoxi.dev") {
+    throw new Error("Staging Router name and hostname must match the approved identities.");
+  }
+  const approvedNames = {
+    router: "knox-os-staging",
+    workshop: "knox-os-staging-workshop",
+    context: "knox-os-staging-context",
+    scheduler: "knox-os-staging-scheduler",
+    customGatekeeper: "knox-os-staging-gatekeeper",
+    gatekeeperMicrosoft: "knox-os-staging-gatekeeper-microsoft",
+    errorReporter: "knox-os-staging-error-reporter",
+  } as const;
+  const productionNames = new Set(Object.values(production.workers).map((worker) => worker.name));
+  for (const [key, approvedName] of Object.entries(approvedNames)) {
+    const worker = staging.workers[key as keyof typeof approvedNames];
+    if (worker?.name !== approvedName || productionNames.has(worker.name)) {
+      throw new Error(`Staging Worker ${key} must use its own approved identity: ${approvedName}.`);
+    }
+  }
+  if (staging.access.issuer !== "https://knoxgrammar.cloudflareaccess.com" ||
+      staging.access.audience !== "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012" ||
+      staging.access.audience === production.access.audience ||
+      staging.access.admins.length !== 1 ||
+      staging.access.admins[0] !== "carrickm@knox.nsw.edu.au") {
+    throw new Error("Staging must use its own Access audience and approved sole administrator.");
+  }
+  if (staging.errorReporting.environment !== "staging" ||
+      staging.context.artifacts?.enabled) {
+    throw new Error("Staging requires private staging reporting and disabled Context Artifacts.");
+  }
+  if ((staging.context.sharingDomain ?? publicOrigin(staging)) ===
+      (production.context.sharingDomain ?? publicOrigin(production))) {
+    throw new Error("Staging Context sharing boundary overlaps production.");
+  }
+  const productionResources = new Set([
+    production.context.kvNamespaceId,
+    production.resources.blueprintsKvNamespaceId,
+    production.resources.avatarsKvNamespaceId,
+    production.resources.blueprintContentBucket,
+  ].filter((resource) => resource !== null));
+  const stagingResources = [
+    staging.context.kvNamespaceId,
+    staging.resources.blueprintsKvNamespaceId,
+    staging.resources.avatarsKvNamespaceId,
+    staging.resources.blueprintContentBucket,
+  ].filter((resource) => resource !== null);
+  if (stagingResources.some((resource) => productionResources.has(resource)) ||
+      new Set(stagingResources).size !== stagingResources.length) {
+    throw new Error("Staging storage binding overlaps an explicitly pinned production resource.");
+  }
+  const shared = staging.staging;
+  if (!shared || typeof shared.sharedProductionMicrosoft !== "boolean" ||
+      typeof shared.sharedProductionAiGateway !== "boolean" ||
+      typeof shared.bootstrapReady !== "boolean" ||
+      typeof shared.releaseReady !== "boolean") {
+    throw new Error("Staging must explicitly declare shared-service authority and release readiness.");
+  }
+  if (!staging.microsoft || shared.sharedProductionMicrosoft !== staging.microsoft.enabled) {
+    throw new Error("Staging Microsoft configuration disagrees with approved sharing mode.");
+  }
+  if (shared.sharedProductionAiGateway) {
+    if (!staging.aiGateway.enabled || staging.aiGateway.name !== production.aiGateway.name ||
+        staging.aiGateway.accountId !== production.aiGateway.accountId ||
+        JSON.stringify(staging.aiGateway.providers) !== JSON.stringify(production.aiGateway.providers)) {
+      throw new Error("Shared staging AI Gateway must match production exactly.");
+    }
+  } else if (staging.aiGateway.enabled &&
+      (staging.aiGateway.name === production.aiGateway.name ||
+       staging.aiGateway.accountId != null &&
+       staging.aiGateway.accountId.toLowerCase() !== staging.accountId.toLowerCase() ||
+       staging.aiGateway.providers?.some((provider) => provider !== "cloudflare"))) {
+    throw new Error("Staging AI Gateway must be separate, same-account and cloudflare-only.");
+  }
+}
+
+export function assertMicrosoftIsolation(
+  staging: ProdWranglerConfig, production: ProdWranglerConfig, shareProduction: boolean,
+): void {
+  for (const field of ["TENANT_ID", "SHAREPOINT_ASSIGNED_SITE_URL"] as const) {
+    const stageValue = staging.vars?.[field];
+    const productionValue = production.vars?.[field];
+    if (shareProduction ? stageValue === undefined || stageValue !== productionValue
+                        : stageValue !== undefined && stageValue === productionValue) {
+      throw new Error(`Staging Microsoft ${field} disagrees with approved sharing mode.`);
+    }
+  }
+}
+
 function validatePublicBaseUrl(config: DeploymentConfig, route: RouterRoute): void {
   const value = config.publicBaseUrl;
   if (value === undefined) {
@@ -275,6 +392,24 @@ export function validateConfig(config: DeploymentConfig): DeploymentConfig {
   }
 
   validateAiGateway(config);
+  if (config.microsoft !== undefined) {
+    const microsoft = config.microsoft;
+    if (typeof microsoft.enabled !== "boolean") {
+      throw new Error("microsoft.enabled must be a boolean.");
+    }
+    if (microsoft.enabled) {
+      if (!/^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(microsoft.tenantId ?? "")) {
+        throw new Error("microsoft.tenantId must be an approved tenant UUID when enabled.");
+      }
+      const siteUrl = microsoft.assignedSiteUrl;
+      if (!siteUrl || !/^https:\/\/[^/]+\/sites\/[^/?#]+$/.test(siteUrl) ||
+          new URL(siteUrl).origin === publicOrigin(config)) {
+        throw new Error("microsoft.assignedSiteUrl must be an HTTPS SharePoint site URL.");
+      }
+    } else if (microsoft.tenantId !== undefined || microsoft.assignedSiteUrl !== undefined) {
+      throw new Error("Disabled Microsoft integration must not carry tenant or SharePoint authority.");
+    }
+  }
 
   if (typeof config.errorReporting.enabled !== "boolean") {
     throw new Error("Error reporting enabled must be a boolean.");
@@ -586,6 +721,13 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     ...gatekeeperMicrosoft.vars,
     BASE_URL: `${origin}/gatekeeper/microsoft`,
   };
+  if (config.microsoft?.enabled === false) {
+    delete gatekeeperMicrosoft.vars.TENANT_ID;
+    delete gatekeeperMicrosoft.vars.SHAREPOINT_ASSIGNED_SITE_URL;
+  } else if (config.microsoft?.enabled) {
+    gatekeeperMicrosoft.vars.TENANT_ID = config.microsoft.tenantId!;
+    gatekeeperMicrosoft.vars.SHAREPOINT_ASSIGNED_SITE_URL = config.microsoft.assignedSiteUrl!;
+  }
 
   if (errorReporter) {
     setCommon(errorReporter, config, config.workers.errorReporter!.name);
@@ -768,10 +910,40 @@ function reportAiGateway(config: DeploymentConfig): void {
     `--name ${config.workers.workshop.name}\n`);
 }
 
+export function assertStagingDeploymentReady(config: DeploymentConfig, bootstrap: boolean): void {
+  if (bootstrap && !config.staging?.bootstrapReady) {
+    throw new Error("Private staging bootstrap needs separate provisioning approval.");
+  }
+  if (!bootstrap && !config.staging?.releaseReady) {
+    throw new Error("Staging deploy is blocked until Access, OAuth and shared-service preflight passes.");
+  }
+  if (!bootstrap && [
+    config.context.kvNamespaceId, config.resources.blueprintsKvNamespaceId,
+    config.resources.avatarsKvNamespaceId, config.resources.blueprintContentBucket,
+  ].some((resource) => !resource)) {
+    throw new Error("Pin all four staging storage identities before releasing the public Router.");
+  }
+}
+
+export function deploymentOrder(config: DeploymentConfig, bootstrap: boolean):
+    (keyof GeneratedConfigs)[] {
+  return [
+    ...(config.errorReporting.enabled ? ["errorReporter" as const] : []),
+    "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+    ...(!bootstrap ? ["router" as const] : []),
+  ];
+}
+
 async function main(): Promise<void> {
+  const { target, check, bootstrap } = parseDeploymentArgs(process.argv.slice(2));
   requireSubmodule();
-  const config = await readDeployment(join(root, "deployment.jsonc"));
-  const generated = generateConfigs(config, {
+  const config = await readDeployment(join(root,
+    target === "staging" ? "deployment.staging.jsonc" : "deployment.jsonc"));
+  if (process.env.CLOUDFLARE_ACCOUNT_ID &&
+      process.env.CLOUDFLARE_ACCOUNT_ID.toLowerCase() !== config.accountId.toLowerCase()) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID disagrees with the selected deployment account.");
+  }
+  const bases: BaseConfigs = {
     router: await readJsonc(join(root, packageDirs.router, "wrangler.jsonc")),
     workshop: await readJsonc(join(root, packageDirs.workshop, "wrangler.jsonc")),
     context: await readJsonc(join(root, packageDirs.context, "wrangler.jsonc")),
@@ -779,7 +951,19 @@ async function main(): Promise<void> {
     customGatekeeper: await readJsonc(join(root, packageDirs.customGatekeeper, "wrangler.jsonc")),
     gatekeeperMicrosoft: await readJsonc(join(root, packageDirs.gatekeeperMicrosoft, "wrangler.jsonc")),
     errorReporter: await readJsonc(join(root, packageDirs.errorReporter, "wrangler.jsonc")),
-  });
+  };
+  const generated = generateConfigs(config, bases);
+  if (target === "production" && (config.microsoft !== undefined || config.staging !== undefined)) {
+    throw new Error("Staging overrides cannot alter the reviewed production config.");
+  }
+  if (target === "staging") {
+    const production = await readDeployment(join(root, "deployment.jsonc"));
+    assertStagingIsolation(config, production);
+    assertMicrosoftIsolation(generated.gatekeeperMicrosoft,
+      generateConfigs(production, bases).gatekeeperMicrosoft,
+      config.staging!.sharedProductionMicrosoft);
+    if (!check) assertStagingDeploymentReady(config, bootstrap);
+  }
   reportAiGateway(config);
 
   try {
@@ -788,20 +972,14 @@ async function main(): Promise<void> {
         generatedPaths[name as keyof typeof generatedPaths],
         JSON.stringify(generatedConfig, null, 2) + "\n");
     }
-    const check = process.argv.includes("--check");
     if (check) run(["test"]);
     build(config);
     const deployArgs = check ? ["--dry-run"] : [];
-    if (config.errorReporting.enabled) {
-      deployWorker(packageDirs.errorReporter, deployArgs);
+    // Bootstrap provisions only private Workers and their new storage. The Router is never
+    // deployed until IDs are pinned and the separately reviewed release gate is opened.
+    for (const key of deploymentOrder(config, bootstrap)) {
+      deployWorker(packageDirs[key], deployArgs);
     }
-    deployWorker(packageDirs.context, deployArgs);
-    deployWorker(packageDirs.scheduler, deployArgs);
-    deployWorker(packageDirs.customGatekeeper, deployArgs);
-    deployWorker(packageDirs.gatekeeperMicrosoft, deployArgs);
-    deployWorker(packageDirs.workshop, deployArgs);
-    // Last: it binds every one of the above.
-    deployWorker(packageDirs.router, deployArgs);
   } finally {
     await Promise.all(Object.values(generatedPaths).map((path) => rm(path, { force: true })));
   }
