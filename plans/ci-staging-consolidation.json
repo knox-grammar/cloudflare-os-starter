@@ -1,0 +1,42 @@
+{
+  "slug": "ci-staging-consolidation",
+  "state": "verified-awaiting-review",
+  "plan": "plans/ci-staging-consolidation.md",
+  "decisionNeeded": "Lifecycle change approved; commit/PR and merge approval remain separate",
+  "tasks": [
+    {
+      "id": "inspect-required-checks",
+      "status": "completed",
+      "dependsOn": [],
+      "acceptance": "Identify stable required check names and current main workflow behavior",
+      "verification": "No main branch protection or repository rulesets found; existing check filename/job retained"
+    },
+    {
+      "id": "consolidate-workflow",
+      "status": "completed",
+      "dependsOn": [
+        "inspect-required-checks"
+      ],
+      "acceptance": "PR checks only; main checks once then requests staging approval; same SHA and no production changes",
+      "verification": "Event guards, credentials, concurrency and exact-SHA review"
+    },
+    {
+      "id": "verify-and-document",
+      "status": "completed",
+      "dependsOn": [
+        "consolidate-workflow"
+      ],
+      "acceptance": "Tests and docs reflect the combined lifecycle with partial-failure evidence retained",
+      "verification": "35 targeted tests passed; YAML parsed; pnpm lint passed; pnpm check (7), pnpm check:staging (7), pnpm check:staging:bootstrap (6) dry-runs passed; no live deployment"
+    },
+    {
+      "id": "review-and-rollout",
+      "status": "pending",
+      "dependsOn": [
+        "verify-and-document"
+      ],
+      "acceptance": "Approved PR and one main workflow requesting Environment approval after checks",
+      "verification": "Separate commit/merge/deployment approvals; no Cloudflare mutation during implementation"
+    }
+  ]
+}

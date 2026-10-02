@@ -39,10 +39,20 @@ test("Access probe requires HTTPS redirect to the exact team login path", () => 
   assert.equal(isAccessChallenge(200, "https://knoxgrammar.cloudflareaccess.com/cdn-cgi/access/login"), false);
 });
 
-test("workflow stays manual, main-only and uses a dedicated staging secret", async () => {
-  const workflow = await readFile(".github/workflows/deploy-staging.yml", "utf8");
+test("combined workflow checks PRs but only main push/manual runs request staging approval", async () => {
+  const workflow = await readFile(".github/workflows/check.yml", "utf8");
   assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /\n  (push|pull_request):/);
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:\n    branches: \[main\]/);
+  assert.match(workflow, /github.event_name == 'push' \|\| github.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /staging-preflight:\n    needs: check/);
+  assert.match(workflow, /deploy:\n    needs: staging-preflight/);
+  assert.match(workflow, /deploy:\n    needs: staging-preflight\n    concurrency:/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  assert.equal((workflow.match(/run: pnpm check\n/g) ?? []).length, 1);
+  assert.equal((workflow.match(/run: pnpm check:staging\n/g) ?? []).length, 1);
+  assert.equal((workflow.match(/ref: \$\{\{ github.sha \}\}/g) ?? []).length, 2);
+  assert.doesNotMatch(workflow, /inputs.approved_sha/);
   assert.match(workflow, /github.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /name: staging/);
   assert.match(workflow, /secrets.STAGING_CLOUDFLARE_API_TOKEN/);

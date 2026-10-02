@@ -57,6 +57,9 @@ async function main(): Promise<void> {
       process.env.GITHUB_REPOSITORY !== "knox-grammar/cloudflare-os-starter") {
     throw new Error("This entrypoint requires the approved main-branch GitHub workflow.");
   }
+  if (command(["git", "rev-parse", "HEAD"]) !== process.env.GITHUB_SHA) {
+    throw new Error("Checkout differs from the checked workflow SHA.");
+  }
   if (process.env.CLOUDFLARE_ACCOUNT_ID !== "2ddaede0fbdd479a6bf410a5f1eb76ad" ||
       !process.env.CLOUDFLARE_API_TOKEN) throw new Error("Missing approved staging account/token.");
   const original = await readFile("deployment.staging.jsonc", "utf8");
@@ -86,6 +89,9 @@ async function main(): Promise<void> {
     sourceSha: command(["git", "rev-parse", "HEAD"]),
     submoduleSha: command(["git", "-C", "cloudflare-os", "rev-parse", "HEAD"]),
     runId: process.env.GITHUB_RUN_ID,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    checkJob: "check",
+    verificationRunUrl: `https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/${process.env.GITHUB_RUN_ID}`,
     accountId: staging.accountId,
     hostname: "os-staging.knoxi.dev",
     workers: {}, probes: [], manualVerification: "pending", migrationRehearsal: "not-proven",
