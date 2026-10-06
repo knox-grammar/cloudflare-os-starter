@@ -231,29 +231,36 @@ See
 [`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
 existing-data rehearsal, negative Access checks and the production release gate.
 
-### Manual staging workflow
+### Combined checks and staging approval
 
-`.github/workflows/deploy-staging.yml` updates the **existing** staging stack, never bootstraps
-new Workers or installs OAuth credentials. It runs only through manual dispatch on `main`,
-with an exact full SHA matching the selected main commit. Both environments are dry-run
-without credentials before the protected staging deployment job. It never promotes production.
+`.github/workflows/check.yml` is the single delivery workflow. Pull requests run credential-free
+checks only. Each push to `main` checks production, staging and private bootstrap once, then
+requests **staging Environment approval**. No Cloudflare token is available before that approval.
+Manual dispatch on `main` remains available for a deliberate fresh check/redeployment.
+The deploy job updates the **existing** stack, never bootstraps Workers or installs OAuth secrets.
+Production deployment remains separate and unchanged. Both checkout jobs pin the same event SHA;
+there is no separate SHA input or second dry-run workflow.
 
 Before first use, separately configure GitHub Environment **`staging`** with a required reviewer,
 exactly one custom deployment branch rule (`main`, type `branch`), and the environment secret
 **`STAGING_CLOUDFLARE_API_TOKEN`**. The workflow fails if reviewer/branch protection is missing;
-the dedicated secret name avoids falling back to the production token. GitHub API inspection
-and these settings have not yet been exercised by a hosted staging deployment. Account-scoped
-Workers tokens are not guaranteed to isolate staging from production Workers, so protect the
-workflow and review its source before approval. No GitHub settings are created by this code.
+the dedicated secret name avoids falling back to the production token. The operator configured
+reviewers `mylescarrick`/`nickec86`, self-review allowed, exactly one Branch `main` rule, and the
+secret. These protections passed hosted preflight. The first scoped-token deployment failed at
+Router zone lookup (run `36956274641`); token/Custom Domain compatibility remains unresolved.
+Do not broaden permissions or retry automatically. No GitHub settings are created by this code.
 
-After the approved workflow is merged into `main`, select **Deploy staging**, enter the selected
-commit's full SHA, and approve the staging Environment job. The helper verifies existing Worker
-deployments, Microsoft secret names and pinned storage before opening the release gate only
-in the runner's temporary config; it restores the original config afterward. Tracked mutation
-gates stay closed. Do not dispatch this workflow from a feature branch.
+After merging, use the **Check and staging** run for that main commit. After checks and protection
+preflight pass, review its exact SHA and approve the staging job when deployment is wanted.
+Reject superseded pending requests; never silently switch the checked SHA to newer main.
+The helper verifies existing Worker deployments, Microsoft secret names and pinned storage before
+opening the release gate only in the runner's temporary config and restoring it afterward.
+Tracked gates stay closed. Deployment-job concurrency serializes staging mutations without
+canceling active deployments or blocking checks for other commits. Feature-branch manual runs
+perform checks only, with no staging approval request or credentials.
 
 The job records sanitized current deployment/version IDs and anonymous Access probes in a
-**30-day** artifact, including partial deployment failures. It retains no cookies, redirects,
+**30-day** artifact, including partial deployment failures, linked to the same run's `check` job. It retains no cookies, redirects,
 response bodies, author emails or deployment annotations. If any deploy or probe fails, stop,
 inventory the seven Workers and review recovery; no automatic retry or rollback. Versions in
 the artifact describe observed account state, not proof that every Worker deployed the requested
