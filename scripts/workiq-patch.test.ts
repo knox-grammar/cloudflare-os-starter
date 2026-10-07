@@ -25,6 +25,7 @@ test("the WorkIQ extension applies to the exact pinned source and preserves unre
     apply(["--reverse", "--check"]);
     const account = readFileSync(resolve(fixture, "packages/mcp-shared/src/account.ts"), "utf8");
     assert.ok(account.includes("protected oauthProvider("));
+    assert.ok(account.includes("provider.validateResourceURL"));
     assert.ok(account.includes("Unrelated fixture edit, preserve it."));
     assert.throws(() => apply(["--check"]));
     const tools = readFileSync(resolve(fixture, "packages/mcp-shared/src/tools.ts"), "utf8");

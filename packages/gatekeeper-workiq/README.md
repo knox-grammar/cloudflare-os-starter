@@ -37,7 +37,7 @@ pnpm --filter @knox/gatekeeper-workiq run test:bundle
 
 The normal Vite+ test task runs all three checks, including an actual dry-run bundle startup and inherited RPC check. `scripts/build-workiq.ts` validates both the adapter and the imported decorated connector classes. The Wrangler aliases point to those validated classes; a package-scoped transform alone silently skips imported classes and cannot ship correctly.
 
-Two small shared-source changes expose the native protected OAuth-provider hook and use deployment-neutral approval prose. `patches/workiq-native-mcp.patch` distributes these explicitly. Preparation checks the exact pin and clean patch applicability, accepts an already-applied patch, and never resets unrelated changes. A partial or incompatible patch fails closed. The committed submodule gitlink is unchanged; no upstream upgrade or SDK copy.
+Small shared-source changes expose the native protected OAuth-provider hook, honor that provider's resource validation during refresh, and use deployment-neutral approval prose. `patches/workiq-native-mcp.patch` distributes these explicitly. Preparation checks the exact pin and clean patch applicability, accepts an already-applied patch, and never resets unrelated changes. A partial or incompatible patch fails closed. The committed submodule gitlink is unchanged; no upstream upgrade or SDK copy.
 
 ## Bounds
 

@@ -49,3 +49,14 @@ Next: publish/review source for fresh CI with approval, then complete token/rout
 ## Publication approval
 
 Operator explicitly approved pushing `feat/workiq-minimal` and opening its PR after checkpoints `e351983` and `559a860`. This is source publication approval only, not merge, protected-environment release approval, private Worker provisioning, OAuth registration/credentials, tenant consent/billing/policy, live mutations or production promotion. Publish from a clean checkout of committed files so unrelated scratch and the intentionally patched local submodule remain untouched.
+
+## Approved precision cuts after Opus review
+
+Operator approved resolving the refresh mismatch and adding truncated-catalog coverage, with lean testing. Optional naming, warning duplication and other P2 suggestions are not included.
+
+- Refresh now reuses the existing OAuth provider's `validateResourceURL` decision. An explicit `undefined` is preserved for WorkIQ, while native providers without a validator retain their endpoint resource. Recheck the connection generation after the async validator and before redeeming a refresh token; existing deduplication, post-refresh fences, persistence and error handling remain native. No new protected hook, SDK fork or adapter runtime override.
+- Exactly two new workerd tests: expired stored credentials exercise the real SDK refresh form and cached token reuse; a seven-tool catalog with six bounded padded schemas exceeds the described byte cap and puts `create_entity` outside it, checking exact lookup and search still classify it as an action despite `readOnlyHint: true`.
+- The refresh test failed on the original resource-bearing body, then passed. Temporarily removing both lookup overrides made the catalog test fail with `mode: read`; the original overrides were restored unchanged and the test passed. No WorkIQ runtime-policy change was needed for the catalog cut.
+- The existing patch test also asserts the shipped refresh-policy hunk is present, preventing a fix existing only in the local submodule. The pin and unrelated scratch are unchanged.
+
+Just-enough verification after edits: 16 WorkIQ workerd tests, 33 existing native account/refresh tests, and the existing exact-pin patch test passed. Provider types, targeted lint and the actual compiled Worker startup/inherited-RPC smoke passed. No full local all-stack suite or live OAuth/tenant call was run for these cuts. GitHub CI runs the full release-independent checks on publication; real Entra refresh compatibility remains part of the hosted verification gate.

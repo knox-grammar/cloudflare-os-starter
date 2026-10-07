@@ -1,5 +1,5 @@
 diff --git a/packages/mcp-shared/src/account.ts b/packages/mcp-shared/src/account.ts
-index cb67b9a5..5cf85cfd 100644
+index cb67b9a5..9bf042b9 100644
 --- a/packages/mcp-shared/src/account.ts
 +++ b/packages/mcp-shared/src/account.ts
 @@ -477,7 +477,7 @@ export abstract class McpAccountBase<E extends AccountEnv, P = unknown>
@@ -11,6 +11,26 @@ index cb67b9a5..5cf85cfd 100644
      server: ConnectedServer,
      generation: number,
      reconnect: boolean,
+@@ -995,11 +995,18 @@ export abstract class McpAccountBase<E extends AccountEnv, P = unknown>
+     discovery: OAuthDiscoveryState, client: StoredOAuthClientInformation,
+   ): Promise<string> {
+     try {
++      const provider = this.oauthProvider(server, generation, false);
++      const resource = provider.validateResourceURL
++        ? await provider.validateResourceURL(new URL(server.endpoint), discovery.resourceMetadata?.resource)
++        : new URL(server.endpoint);
++      if (!this.isCurrentConnection(server, generation)) {
++        throw new Error("Discarded credentials refreshed for a previous MCP connection.");
++      }
+       const refreshed = await refreshAuthorization(discovery.authorizationServerUrl, {
+         metadata: discovery.authorizationServerMetadata,
+         clientInformation: client,
+         refreshToken,
+-        resource: new URL(server.endpoint),
++        resource,
+         fetchFn: sdkFetch(this.fetchOptions()),
+       });
+       if (!this.isCurrentConnection(server, generation)) {
 diff --git a/packages/mcp-shared/src/tools.ts b/packages/mcp-shared/src/tools.ts
 index 69a8fb8e..c1501f15 100644
 --- a/packages/mcp-shared/src/tools.ts

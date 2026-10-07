@@ -6,14 +6,17 @@ const tools = ["fetch", "fetch_blob", "get_schema", "search_paths", "list_agents
   "create_entity", "update_entity", "delete_entity", "do_action", "call_function", "future_tool"];
 let dispatched: { name: string; arguments: unknown }[] = [];
 let failWrite = false;
+let tokenRequests: URLSearchParams[] = [];
+let oversizedCatalog = false;
 
 beforeEach(() => {
-  dispatched = []; failWrite = false;
+  dispatched = []; failWrite = false; tokenRequests = []; oversizedCatalog = false;
   vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
     if (String(_url).includes("/.well-known/oauth-protected-resource")) {
       return Response.json({ resource: WORKIQ_ENDPOINT });
     }
     if (String(_url).endsWith("/oauth2/v2.0/token")) {
+      tokenRequests.push(new URLSearchParams(String(init?.body)));
       return Response.json({ access_token: "fresh-fixture-token", refresh_token: "fixture-refresh", token_type: "Bearer", expires_in: 3600 });
     }
     if (init?.method === "DELETE") return new Response(null, { status: 204 });
@@ -23,8 +26,10 @@ beforeEach(() => {
     if (message.method === "initialize") result = {
       protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "WorkIQ", version: "fixture" },
     };
-    if (message.method === "tools/list") result = { tools: tools.map(name => ({
-      name, description: name, inputSchema: { type: "object" },
+    if (message.method === "tools/list") result = { tools: (oversizedCatalog
+      ? [...Array.from({ length: 6 }, (_, i) => `padding_${i}`), "create_entity"] : tools).map(name => ({
+      name, description: name, inputSchema: { type: "object",
+        ...(name.startsWith("padding_") ? { description: "x".repeat(18_000) } : {}) },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     })) };
     if (message.method === "tools/call") {
@@ -55,6 +60,18 @@ it("exposes every operation in listing, exact lookup, search and generated metho
   expect(catalog.searched[0].mode).toBe("action");
   for (const name of tools) expect(catalog.types).toContain(`"${name}"`);
   expect(catalog.observations).toBe(3);
+  expect(dispatched).toHaveLength(0);
+});
+
+it("keeps an annotated mutation approval-gated through both truncated-catalog lookup paths", async () => {
+  oversizedCatalog = true;
+  const catalog = await hooks.catalog("truncated", await account(), "create_entity");
+  expect(catalog.all.length).toBeLessThan(6);
+  expect(catalog.all.map((tool: { name: string }) => tool.name)).not.toContain("create_entity");
+  for (const entries of [catalog.found, catalog.searched]) {
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ name: "create_entity", mode: "action" });
+  }
   expect(dispatched).toHaveLength(0);
 });
 
@@ -109,6 +126,29 @@ it("records structured reads as observations without approval", async () => {
   expect(result.actions).toHaveLength(0);
 });
 
+
+it("refreshes expired WorkIQ credentials without an RFC 8707 resource parameter", async () => {
+  const id = await account();
+  const connected = env.MCP_ACCOUNT.get(env.MCP_ACCOUNT.idFromString(id));
+  const issuer = `https://login.microsoftonline.com/${KNOX_TENANT}/v2.0`;
+  await runInDurableObject(connected, (_instance, context) => {
+    context.storage.kv.put("tokens", { access_token: "expired-fixture-token", refresh_token: "fixture-refresh",
+      token_type: "Bearer", expiresAt: 0, issuer });
+    context.storage.kv.put("oauthClient", { client_id: "fixture-client", token_endpoint_auth_method: "none", issuer });
+    context.storage.kv.put("oauthDiscovery", { authorizationServerUrl: issuer,
+      authorizationServerMetadata: { issuer, token_endpoint: `https://login.microsoftonline.com/${KNOX_TENANT}/oauth2/v2.0/token`,
+        token_endpoint_auth_methods_supported: ["none"] },
+      resourceMetadata: { resource: WORKIQ_ENDPOINT } });
+  });
+  expect((await connected.getConnection(WORKIQ_ENDPOINT)).authorization).toBe("fresh-fixture-token");
+  expect(tokenRequests).toHaveLength(1);
+  expect(tokenRequests[0].get("grant_type")).toBe("refresh_token");
+  expect(tokenRequests[0].get("refresh_token")).toBe("fixture-refresh");
+  expect(tokenRequests[0].get("client_id")).toBe("fixture-client");
+  expect(tokenRequests[0].has("resource")).toBe(false);
+  expect((await connected.getConnection(WORKIQ_ENDPOINT)).authorization).toBe("fresh-fixture-token");
+  expect(tokenRequests).toHaveLength(1);
+});
 
 it("starts hosted registered-client OAuth, redeems once and stages reconnect without replacing live tokens", async () => {
   const id = env.MCP_ACCOUNT.newUniqueId();

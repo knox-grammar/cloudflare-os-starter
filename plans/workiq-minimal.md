@@ -17,7 +17,7 @@ Graph expansion is preserved on `archive/microsoft-graph-save-as` at `647eeff`, 
 - Optional deployment-wrapper support generates a private WorkIQ Worker, Router callback route and vendor binding. Production remains opted out; the separately approved beta wiring now proposes a private WorkIQ Worker in the local staging configuration, with live setup/release gates still closed. See [beta slices](workiq-beta.md).
 - The build validates imported native RPC classes, with explicit generated-source aliases and a production-bundle startup regression check.
 
-Two small shared-source edits add a protected OAuth-provider hook and truthful deployment-policy approval prose. They are distributed explicitly through `patches/workiq-native-mcp.patch`, with exact-pin checks and idempotent clean application. No reset of unrelated submodule work, pin upgrade or commit.
+Small shared-source edits expose the protected OAuth-provider hook, reuse its resource validation on token refresh, and provide truthful deployment-policy approval prose. They are distributed explicitly through `patches/workiq-native-mcp.patch`, with exact-pin checks and idempotent clean application. No reset of unrelated submodule work, pin upgrade or commit.
 
 ## Bounds and authority
 

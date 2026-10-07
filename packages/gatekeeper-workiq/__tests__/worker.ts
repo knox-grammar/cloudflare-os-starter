@@ -69,12 +69,12 @@ export class TestHooks extends DurableObject<Env> {
       observations: queue.observations, auto: await facet.getAutoApprovableActions() };
   }
 
-  async catalog(name: string, accountObjectId: string) {
+  async catalog(name: string, accountObjectId: string, tool = "ask") {
     const facet = this.#facet(name, accountObjectId);
     const queue = new Queue();
     const session = await facet.startSession(queue as never);
-    return { all: await session.listTools(), found: await session.listTools({ name: "ask" }),
-      searched: await session.listTools({ search: "ask" }), types: await facet.getTypeScriptTypes(),
+    return { all: await session.listTools(), found: await session.listTools({ name: tool }),
+      searched: await session.listTools({ search: tool }), types: await facet.getTypeScriptTypes(),
       observations: queue.observations.length };
   }
 
