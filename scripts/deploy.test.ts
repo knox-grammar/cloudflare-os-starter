@@ -88,6 +88,7 @@ async function baseConfigs(): Promise<BaseConfigs> {
     scheduler: await baseConfig("../cloudflare-os/packages/gatekeeper-scheduler/wrangler.jsonc"),
     customGatekeeper: await baseConfig("../packages/custom-gatekeeper/wrangler.jsonc"),
     gatekeeperMicrosoft: await baseConfig("../packages/gatekeeper-microsoft/wrangler.jsonc"),
+    gatekeeperWorkIQ: await baseConfig("../packages/gatekeeper-workiq/wrangler.jsonc"),
     errorReporter: await baseConfig("../packages/error-reporter/wrangler.jsonc"),
   };
 }
@@ -152,14 +153,14 @@ test("private bootstrap excludes Router while full deploy keeps it last", async 
   enabled.resources.blueprintContentBucket = "stage-blueprint-bucket";
   assert.doesNotThrow(() => assertStagingDeploymentReady(enabled, false));
   assert.deepEqual(deploymentOrder(staging, true), [
-    "errorReporter", "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+    "errorReporter", "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "gatekeeperWorkIQ", "workshop",
   ]);
   assert.deepEqual(deploymentOrder(staging, false), [
     ...deploymentOrder(staging, true), "router",
   ]);
 });
 
-test("staging keeps all seven Workers and data bindings away from production", async () => {
+test("staging keeps all eight Workers and data bindings away from production", async () => {
   const production = await deploymentFile("../deployment.jsonc");
   const staging = await deploymentFile("../deployment.staging.jsonc");
   assert.doesNotThrow(() => assertStagingIsolation(staging, production));
@@ -168,7 +169,11 @@ test("staging keeps all seven Workers and data bindings away from production", a
   const stage = generateConfigs(staging, bases);
   const stageNames = new Set(Object.values(stage).map((worker) => worker.name));
   const prodNames = new Set(Object.values(prod).map((worker) => worker.name));
-  assert.equal(stageNames.size, 7);
+  assert.equal(stageNames.size, 8);
+  assert.equal(prodNames.size, 7);
+  assert.equal(prod.gatekeeperWorkIQ, undefined);
+  assert.equal(stage.gatekeeperWorkIQ!.vars!.BASE_URL, "https://os-staging.knoxi.dev/gatekeeper/workiq");
+  assert.deepEqual(stage.gatekeeperWorkIQ!.secrets!.required, ["WORKIQ_CLIENT_ID"]);
   for (const name of stageNames) assert.equal(prodNames.has(name), false);
   for (const service of [...stage.router.services!, ...stage.workshop.services!]) {
     assert.ok(stageNames.has(service.service), `binding ${service.binding} reached ${service.service}`);

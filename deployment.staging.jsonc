@@ -13,6 +13,8 @@
     "scheduler": { "name": "knox-os-staging-scheduler" },
     "customGatekeeper": { "name": "knox-os-staging-gatekeeper" },
     "gatekeeperMicrosoft": { "name": "knox-os-staging-gatekeeper-microsoft" },
+    // Proposed beta identity. Inventory/approve private provisioning and hosted OAuth separately.
+    "gatekeeperWorkIQ": { "name": "knox-os-staging-gatekeeper-workiq" },
     "errorReporter": { "name": "knox-os-staging-error-reporter" }
   },
   // Hostname-based Access app, separate from production. Policy is managed in Zero Trust.

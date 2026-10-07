@@ -33,6 +33,11 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Prepare exact-pin WorkIQ extension and check types
+        run: |
+          node scripts/prepare-workiq.ts
+          pnpm run types:scripts
+          pnpm --filter @knox/gatekeeper-workiq run types:check
       - name: Check production deployment (dry-run only)
         run: pnpm check
       - name: Check staging deployment (dry-run only)
@@ -91,6 +96,8 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Prepare exact-pin WorkIQ extension
+        run: node scripts/prepare-workiq.ts
       - name: Deploy approved existing staging stack (Router last)
         env:
           CLOUDFLARE_ACCOUNT_ID: 2ddaede0fbdd479a6bf410a5f1eb76ad
@@ -115,4 +122,4 @@ jobs:
       - name: Manual verification reminder
         if: always() && !cancelled()
         run: |
-          echo 'Signed-in allowed/denied users, sole /admin access, Microsoft OAuth, persistence and low-cost AI still require manual evidence. A successful deploy is not production or migration approval.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Signed-in allowed/denied users, sole /admin access, Microsoft/WorkIQ hosted OAuth, tiny decoded WorkIQ bytes, separately approved action effects, persistence and low-cost AI still require manual evidence. Secret-name presence and anonymous Access redirects do not prove connector readiness. A successful deploy is not production or migration approval.' >> "$GITHUB_STEP_SUMMARY"

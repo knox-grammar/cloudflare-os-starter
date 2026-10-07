@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { parse } from "jsonc-parser";
-import { approvedReleaseConfig, deploymentSummary, isAccessChallenge } from "./staging-workflow.ts";
+import { approvedReleaseConfig, assertStagingPrerequisites, deploymentSummary, isAccessChallenge, stagingProbePaths } from "./staging-workflow.ts";
 import type { DeploymentConfig } from "./deployment-config.ts";
 
 test("workflow enables only public release in memory and requires pinned storage", async () => {
@@ -16,6 +16,65 @@ test("workflow enables only public release in memory and requires pinned storage
   assert.throws(() => approvedReleaseConfig(staging, production), /Pin all four/);
   staging.staging!.bootstrapReady = true;
   assert.throws(() => approvedReleaseConfig(staging, production), /must be closed/);
+});
+
+test("staging preflight refuses WorkIQ without its own registered client credential", async () => {
+  const staging = parse(await readFile("deployment.staging.jsonc", "utf8")) as DeploymentConfig;
+  staging.workers.gatekeeperWorkIQ = { name: "knox-os-staging-gatekeeper-workiq" };
+  assert.throws(() => assertStagingPrerequisites(staging, {
+    deployments: () => [{ id: "existing", versions: [{ version_id: "v1", percentage: 100 }] }],
+    secrets: name => name === staging.workers.gatekeeperMicrosoft.name
+      ? [{ name: "CLIENT_ID" }, { name: "CLIENT_SECRET" }] : [],
+  }), /WorkIQ credential names/);
+});
+
+test("staging preflight requires every existing identity before checking credentials", async () => {
+  const staging = parse(await readFile("deployment.staging.jsonc", "utf8")) as DeploymentConfig;
+  const credentialReads: string[] = [];
+  assert.throws(() => assertStagingPrerequisites(staging, {
+    deployments: name => name === staging.workers.gatekeeperWorkIQ!.name ? []
+      : [{ id: "existing", versions: [{ version_id: "v1", percentage: 100 }] }],
+    secrets: name => { credentialReads.push(name); return []; },
+  }), /knox-os-staging-gatekeeper-workiq is not ready/);
+  assert.deepEqual(credentialReads, []);
+});
+
+test("staging preflight supports registered public clients and the unchanged Graph-only stack", async () => {
+  const staging = parse(await readFile("deployment.staging.jsonc", "utf8")) as DeploymentConfig;
+  const credentialReads: string[] = [];
+  const inventory = {
+    deployments: () => [{ id: "existing", versions: [{ version_id: "v1", percentage: 100 }] }],
+    secrets: (name: string) => {
+      credentialReads.push(name);
+      return name === staging.workers.gatekeeperMicrosoft.name
+        ? [{ name: "CLIENT_ID" }, { name: "CLIENT_SECRET" }]
+        : [{ name: "WORKIQ_CLIENT_ID" }];
+    },
+  };
+  assert.doesNotThrow(() => assertStagingPrerequisites(staging, inventory));
+  assert.deepEqual(credentialReads, ["knox-os-staging-gatekeeper-microsoft", "knox-os-staging-gatekeeper-workiq"]);
+  delete staging.workers.gatekeeperWorkIQ;
+  credentialReads.length = 0;
+  assert.doesNotThrow(() => assertStagingPrerequisites(staging, inventory));
+  assert.deepEqual(credentialReads, ["knox-os-staging-gatekeeper-microsoft"]);
+});
+
+test("unavailable or malformed credential inventory is refused without remote diagnostics", async () => {
+  const staging = parse(await readFile("deployment.staging.jsonc", "utf8")) as DeploymentConfig;
+  for (const secrets of [() => null, () => [null, {}], () => ({ name: "CLIENT_ID" }),
+    () => { throw new Error("private remote diagnostic fixture"); }]) {
+    assert.throws(() => assertStagingPrerequisites(staging, {
+      deployments: () => [{ id: "existing", versions: [{ version_id: "v1", percentage: 100 }] }], secrets,
+    }), (error: unknown) => error instanceof Error &&
+      error.message === "Staging Microsoft credential names are missing or could not be verified.");
+  }
+});
+
+test("Access evidence includes WorkIQ only when its private Worker is configured", async () => {
+  const staging = parse(await readFile("deployment.staging.jsonc", "utf8")) as DeploymentConfig;
+  assert.deepEqual(stagingProbePaths(staging), ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth", "/gatekeeper/workiq/oauth"]);
+  delete staging.workers.gatekeeperWorkIQ;
+  assert.deepEqual(stagingProbePaths(staging), ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth"]);
 });
 
 test("deployment evidence picks latest and omits author and annotations", () => {
@@ -58,6 +117,10 @@ test("combined workflow checks PRs but only main push/manual runs request stagin
   assert.match(workflow, /secrets.STAGING_CLOUDFLARE_API_TOKEN/);
   assert.doesNotMatch(workflow, /secrets.CLOUDFLARE_API_TOKEN|name: production|pnpm deploy\n/);
   assert.match(workflow, /required_reviewers/);
+  assert.equal((workflow.match(/node scripts\/prepare-workiq.ts/g) ?? []).length, 2);
+  assert.match(workflow, /pnpm run types:scripts/);
+  assert.match(workflow, /pnpm --filter @knox\/gatekeeper-workiq run types:check/);
+  assert.match(workflow, /Secret-name presence and anonymous Access redirects do not prove connector readiness/);
   assert.match(workflow, /if: always\(\) && !cancelled\(\)/);
   assert.match(workflow, /retention-days: 30/);
 });

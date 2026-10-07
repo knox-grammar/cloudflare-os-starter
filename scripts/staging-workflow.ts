@@ -32,6 +32,40 @@ export function deploymentSummary(raw: unknown): { deploymentId: string; version
   }) };
 }
 
+export function assertStagingPrerequisites(staging: DeploymentConfig, inventory: {
+  deployments: (workerName: string) => unknown;
+  secrets: (workerName: string) => unknown;
+}): void {
+  // Read every existing identity before the first deploy; never bootstrap during a release.
+  for (const worker of Object.values(staging.workers)) {
+    try { deploymentSummary(inventory.deployments(worker.name)); }
+    catch { throw new Error(`Staging Worker ${worker.name} is not ready; provision or reconcile it separately.`); }
+  }
+  const requirements = [
+    { workerName: staging.workers.gatekeeperMicrosoft.name, connector: "Microsoft",
+      names: ["CLIENT_ID", "CLIENT_SECRET"] },
+    ...(staging.workers.gatekeeperWorkIQ ? [{ workerName: staging.workers.gatekeeperWorkIQ.name,
+      connector: "WorkIQ", names: ["WORKIQ_CLIENT_ID"] }] : []),
+  ];
+  for (const requirement of requirements) {
+    try {
+      const raw = inventory.secrets(requirement.workerName);
+      if (!Array.isArray(raw) || !requirement.names.every(name =>
+        raw.some(entry => entry !== null && typeof entry === "object" && entry.name === name))) {
+        throw new Error("Missing credential name.");
+      }
+    } catch {
+      // Inventory errors may include private CLI responses; retain no remote diagnostics.
+      throw new Error(`Staging ${requirement.connector} credential names are missing or could not be verified.`);
+    }
+  }
+}
+
+export function stagingProbePaths(staging: DeploymentConfig): string[] {
+  return ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth",
+    ...(staging.workers.gatekeeperWorkIQ ? ["/gatekeeper/workiq/oauth"] : [])];
+}
+
 export function isAccessChallenge(status: number, location: string | null): boolean {
   if (![302, 303, 307, 308].includes(status) || !location) return false;
   try {
@@ -68,16 +102,11 @@ async function main(): Promise<void> {
     { allowTrailingComma: true }) as DeploymentConfig;
   const approved = approvedReleaseConfig(staging, production);
   if (mode === "deploy") {
-    // This workflow updates an existing stack, never bootstraps missing Workers or credentials.
-    for (const worker of Object.values(staging.workers)) {
-      deploymentSummary(JSON.parse(command(["pnpm", "exec", "wrangler", "deployments", "list",
-        "--name", worker.name, "--json"])));
-    }
-    const secrets = JSON.parse(command(["pnpm", "exec", "wrangler", "secret", "list",
-      "--name", staging.workers.gatekeeperMicrosoft!.name]));
-    if (!["CLIENT_ID", "CLIENT_SECRET"].every(name => secrets.some((entry: any) => entry.name === name))) {
-      throw new Error("Staging Microsoft credential names are missing.");
-    }
+    assertStagingPrerequisites(staging, {
+      deployments: name => JSON.parse(command(["pnpm", "exec", "wrangler", "deployments", "list",
+        "--name", name, "--json"])),
+      secrets: name => JSON.parse(command(["pnpm", "exec", "wrangler", "secret", "list", "--name", name])),
+    });
     try {
       await writeFile("deployment.staging.jsonc", JSON.stringify(approved, null, 2) + "\n");
       const result = spawnSync("pnpm", ["deploy:staging"], { stdio: "inherit" });
@@ -104,7 +133,7 @@ async function main(): Promise<void> {
       ])));
     } catch { evidence.workers[worker.name] = { error: "inventory-failed" }; failed = true; }
   }
-  for (const path of ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth"]) {
+  for (const path of stagingProbePaths(staging)) {
     try {
       const response = await fetch("https://os-staging.knoxi.dev" + path,
         { redirect: "manual", signal: AbortSignal.timeout(20_000) });

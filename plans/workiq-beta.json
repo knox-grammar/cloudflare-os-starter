@@ -1,0 +1,67 @@
+{
+  "slug": "workiq-beta",
+  "title": "WorkIQ owner-only beta",
+  "status": "pipeline_verified_live_setup_gated",
+  "target": "https://os-staging.knoxi.dev",
+  "proposedWorker": "knox-os-staging-gatekeeper-workiq",
+  "submodulePin": "32ce152654e8a205b54e094e31be932c620dbc52",
+  "approvals": {
+    "betaTarget": true,
+    "pipelineImplementation": true,
+    "remotePublication": false,
+    "infrastructureMutation": false,
+    "oauthRegistration": false,
+    "credentials": false,
+    "consentBillingPolicy": false,
+    "stagingRelease": false,
+    "liveMutationFixture": false,
+    "productionRelease": false
+  },
+  "tasks": [
+    {
+      "id": "B1",
+      "title": "Staging wiring and fail-closed CI/CD preflight",
+      "status": "complete",
+      "dependsOn": [],
+      "acceptance": "Preflight and wrapper regressions, explicit types, full staging dry-run, cleaned generated files, unchanged production and pin; no mutation gates opened",
+      "verification": [
+        "43 wrapper/preflight tests passed",
+        "script and WorkIQ types passed",
+        "targeted lint passed",
+        "pnpm check:staging passed: 513 tests reported, 4/13 cached test tasks; eight Worker dry-runs and compiled WorkIQ RPC smoke passed",
+        "production configuration/workflow and submodule pin unchanged; generated configs cleaned"
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "Read-only inventory and partial-staging reconciliation",
+      "status": "pending",
+      "dependsOn": [
+        "B1"
+      ],
+      "acceptance": "Sanitized current versions, routing/Access, Worker ownership, credential names and protected environment evidence with a precise repair/setup proposal",
+      "verification": []
+    },
+    {
+      "id": "B3",
+      "title": "Separately approved private Worker and hosted OAuth setup",
+      "status": "approval_required",
+      "dependsOn": [
+        "B2"
+      ],
+      "acceptance": "Exact mutation summary approved; private identity and appropriately registered hosted credentials verified without exposure",
+      "verification": []
+    },
+    {
+      "id": "B4",
+      "title": "Separately approved staged release and real-user evidence",
+      "status": "approval_required",
+      "dependsOn": [
+        "B3"
+      ],
+      "acceptance": "Reviewed publication, exact-SHA protected release, hosted identity/read/bytes/denial evidence and separately approved mutation fixtures; no production promotion",
+      "verification": []
+    }
+  ],
+  "progress": "workiq-beta.progress.md"
+}

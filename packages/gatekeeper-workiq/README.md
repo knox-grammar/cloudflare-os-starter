@@ -47,7 +47,7 @@ WorkIQ's documented 4 MB raw file allowance is not the wrapper's supported raw d
 
 ## Optional deployment wiring
 
-`workers.gatekeeperWorkIQ: { "name": "<separately-approved-worker-name>" }` opts into wrapper generation of the private Worker, Router path, vendor service binding and deployment order. Without it the existing seven-Worker configuration stays unchanged. The actual production and staging files do not enable it.
+`workers.gatekeeperWorkIQ: { "name": "<separately-approved-worker-name>" }` opts into wrapper generation of the private Worker, Router path, vendor service binding and deployment order. Without it the existing seven-Worker configuration stays unchanged. Production remains opted out. The local staging file proposes `knox-os-staging-gatekeeper-workiq` for beta, with both live mutation gates closed; this does not provision or release the Worker.
 
 Enablement, hosted credentials, infrastructure and releases require separate approval. Staging uses its own Worker identity. Resolve the earlier partial-staging/Router problem before a live release. No deployment or live Microsoft mutation was performed during implementation.
 
