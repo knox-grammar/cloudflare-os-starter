@@ -1,0 +1,49 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "gatekeeper-workiq",
+  "main": ".wrangler/validate/packages/gatekeeper-workiq/src/workiq.ts",
+  "build": {
+    "command": "pnpm run build:worker",
+    "watch_dir": "src"
+  },
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": [
+    "allow_irrevocable_stub_storage",
+    "global_fetch_strictly_public"
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.txt",
+        "**/*.svg",
+        "**/skill.md"
+      ],
+      "fallthrough": false
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v0",
+      "new_sqlite_classes": [
+        "McpAccount",
+        "McpGatekeeperImpl"
+      ]
+    }
+  ],
+  "vars": {
+    "MCP_CLIENT_NAME": "Knox WorkIQ",
+    "MCP_ALLOW_INSECURE": "false"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
+  "alias": {
+    "@gadgets/mcp-gatekeeper": "./.wrangler/validate/cloudflare-os/packages/gatekeeper-mcp/src/mcp.ts",
+    "@gadgets/mcp-gatekeeper/src/generated/server-configurator-ui.txt": "./.wrangler/validate/cloudflare-os/packages/gatekeeper-mcp/src/generated/server-configurator-ui.txt"
+  }
+}

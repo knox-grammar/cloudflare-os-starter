@@ -1,0 +1,35 @@
+{
+  "name": "@knox/gatekeeper-workiq",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/workiq.ts",
+  "scripts": {
+    "build": "pnpm run build:ui && pnpm run types:check",
+    "build:ui": "pnpm --filter @gadgets/mcp-gatekeeper exec gadgets-build-configurator .",
+    "types:check": "pnpm run prepare:shared && tsc --noEmit",
+    "test:run": "vitest run",
+    "build:worker": "node ../../scripts/build-workiq.ts",
+    "test:bundle": "wrangler deploy --dry-run --outdir .wrangler/dry-run && node scripts/smoke-bundle.ts",
+    "prepare:shared": "node ../../scripts/prepare-workiq.ts"
+  },
+  "dependencies": {
+    "@gadgets/backend-utils": "workspace:*",
+    "@gadgets/configurator-ui": "workspace:*",
+    "@gadgets/mcp-gatekeeper": "workspace:*",
+    "@gadgets/mcp-shared": "workspace:*",
+    "@gadgets/workshop-shared": "workspace:*",
+    "@modelcontextprotocol/client": "2.0.0",
+    "capnweb-validate": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/vitest-pool-workers": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:",
+    "@gadgets/scripts": "workspace:*",
+    "vite": "catalog:",
+    "miniflare": "catalog:"
+  }
+}

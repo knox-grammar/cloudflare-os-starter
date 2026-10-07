@@ -32,6 +32,67 @@ export function deploymentSummary(raw: unknown): { deploymentId: string; version
   }) };
 }
 
+export function assertStagingPrerequisites(staging: DeploymentConfig, inventory: {
+  deployments: (workerName: string) => unknown;
+  secrets: (workerName: string) => unknown;
+}): void {
+  // Read every existing identity before the first deploy; never bootstrap during a release.
+  for (const worker of Object.values(staging.workers)) {
+    try { deploymentSummary(inventory.deployments(worker.name)); }
+    catch { throw new Error(`Staging Worker ${worker.name} is not ready; provision or reconcile it separately.`); }
+  }
+  const requirements = [
+    { workerName: staging.workers.gatekeeperMicrosoft.name, connector: "Microsoft",
+      names: ["CLIENT_ID", "CLIENT_SECRET"] },
+    ...(staging.workers.gatekeeperWorkIQ ? [{ workerName: staging.workers.gatekeeperWorkIQ.name,
+      connector: "WorkIQ", names: ["WORKIQ_CLIENT_ID"] }] : []),
+  ];
+  for (const requirement of requirements) {
+    try {
+      const raw = inventory.secrets(requirement.workerName);
+      if (!Array.isArray(raw) || !requirement.names.every(name =>
+        raw.some(entry => entry !== null && typeof entry === "object" && entry.name === name))) {
+        throw new Error("Missing credential name.");
+      }
+    } catch {
+      // Inventory errors may include private CLI responses; retain no remote diagnostics.
+      throw new Error(`Staging ${requirement.connector} credential names are missing or could not be verified.`);
+    }
+  }
+}
+
+export async function assertStagingZoneReadable(staging: DeploymentConfig, token: string,
+  fetcher: typeof fetch = fetch): Promise<void> {
+  try {
+    if (!token || staging.workers.router.route.customDomain !== "os-staging.knoxi.dev") {
+      throw new Error("Unexpected staging authority.");
+    }
+    const url = new URL("https://api.cloudflare.com/client/v4/zones");
+    url.searchParams.set("name", "knoxi.dev");
+    url.searchParams.set("account.id", staging.accountId);
+    const response = await fetcher(url, { method: "GET", redirect: "error",
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) { await response.body?.cancel(); throw new Error("Zone lookup refused."); }
+    const raw = await response.json() as { success?: boolean; result?: {
+      id?: string; name?: string; status?: string; account?: { id?: string };
+    }[] };
+    const zone = raw?.result?.[0];
+    if (raw?.success !== true || !Array.isArray(raw.result) || raw.result.length !== 1 ||
+        zone?.id !== "423dd6e3814250bf304de8812e22ce4a" || zone.name !== "knoxi.dev" ||
+        zone.status !== "active" || zone.account?.id !== staging.accountId) {
+      throw new Error("Approved active zone not visible.");
+    }
+  } catch {
+    // The operator's cf profile may see a zone the release token cannot. Never log either token or API errors.
+    throw new Error("Staging zone-read preflight failed; verify the release token's access to the approved knoxi.dev zone before deploying.");
+  }
+}
+
+export function stagingProbePaths(staging: DeploymentConfig): string[] {
+  return ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth",
+    ...(staging.workers.gatekeeperWorkIQ ? ["/gatekeeper/workiq/oauth"] : [])];
+}
+
 export function isAccessChallenge(status: number, location: string | null): boolean {
   if (![302, 303, 307, 308].includes(status) || !location) return false;
   try {
@@ -68,16 +129,12 @@ async function main(): Promise<void> {
     { allowTrailingComma: true }) as DeploymentConfig;
   const approved = approvedReleaseConfig(staging, production);
   if (mode === "deploy") {
-    // This workflow updates an existing stack, never bootstraps missing Workers or credentials.
-    for (const worker of Object.values(staging.workers)) {
-      deploymentSummary(JSON.parse(command(["pnpm", "exec", "wrangler", "deployments", "list",
-        "--name", worker.name, "--json"])));
-    }
-    const secrets = JSON.parse(command(["pnpm", "exec", "wrangler", "secret", "list",
-      "--name", staging.workers.gatekeeperMicrosoft!.name]));
-    if (!["CLIENT_ID", "CLIENT_SECRET"].every(name => secrets.some((entry: any) => entry.name === name))) {
-      throw new Error("Staging Microsoft credential names are missing.");
-    }
+    await assertStagingZoneReadable(staging, process.env.CLOUDFLARE_API_TOKEN);
+    assertStagingPrerequisites(staging, {
+      deployments: name => JSON.parse(command(["pnpm", "exec", "wrangler", "deployments", "list",
+        "--name", name, "--json"])),
+      secrets: name => JSON.parse(command(["pnpm", "exec", "wrangler", "secret", "list", "--name", name])),
+    });
     try {
       await writeFile("deployment.staging.jsonc", JSON.stringify(approved, null, 2) + "\n");
       const result = spawnSync("pnpm", ["deploy:staging"], { stdio: "inherit" });
@@ -94,9 +151,13 @@ async function main(): Promise<void> {
     verificationRunUrl: `https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/${process.env.GITHUB_RUN_ID}`,
     accountId: staging.accountId,
     hostname: "os-staging.knoxi.dev",
-    workers: {}, probes: [], manualVerification: "pending", migrationRehearsal: "not-proven",
+    workers: {}, probes: [], zoneReadable: false, manualVerification: "pending", migrationRehearsal: "not-proven",
   };
   let failed = false;
+  try {
+    await assertStagingZoneReadable(staging, process.env.CLOUDFLARE_API_TOKEN);
+    evidence.zoneReadable = true;
+  } catch { failed = true; }
   for (const worker of Object.values(staging.workers)) {
     try {
       evidence.workers[worker.name] = deploymentSummary(JSON.parse(command([
@@ -104,7 +165,7 @@ async function main(): Promise<void> {
       ])));
     } catch { evidence.workers[worker.name] = { error: "inventory-failed" }; failed = true; }
   }
-  for (const path of ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth"]) {
+  for (const path of stagingProbePaths(staging)) {
     try {
       const response = await fetch("https://os-staging.knoxi.dev" + path,
         { redirect: "manual", signal: AbortSignal.timeout(20_000) });

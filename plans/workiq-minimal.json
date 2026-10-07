@@ -1,0 +1,112 @@
+{
+  "slug": "workiq-minimal",
+  "title": "Minimal WorkIQ Gatekeeper",
+  "status": "complete_interface_implemented_locally_release_gated",
+  "goal": "Reuse Cloudflare OS native MCP machinery with the smallest WorkIQ-specific adapter and one routing skill",
+  "activeBranch": "feat/workiq-minimal",
+  "baseline": "672cadfc2c6874bcf780f2510522df6885264db6",
+  "parkedBranch": "archive/microsoft-graph-save-as",
+  "parkedCheckpoint": "647eeff",
+  "retainedOriginalBranch": "feat/microsoft-gatekeeper-next",
+  "submodulePin": "32ce152654e8a205b54e094e31be932c620dbc52",
+  "interface": "workiq-minimal-interface.d.ts",
+  "skillDraft": "../packages/gatekeeper-workiq/skill.md",
+  "progress": "workiq-minimal.progress.md",
+  "resourceGranularity": "Private delegated WorkIQ service connection with named-tool grants; no document-level confinement claim",
+  "nativeMethods": [
+    "listTools",
+    "callTool",
+    "getActionResult"
+  ],
+  "generatedMethods": "Reuse schema-generated named tool methods rather than hand-authoring workload interfaces",
+  "executionScope": {
+    "firstSlice": "Complete discovered MCP catalog, including all reads, downloads, mutations, actions, functions and Copilot delegation",
+    "ask": "Conservatively approval-gated unless enforceable upstream read-only behavior is established; not per-step approval inside Copilot",
+    "directMutations": "Fully implemented through native exact-payload approval and durable application",
+    "autoApprovedMutations": false,
+    "sharing": "owner_only"
+  },
+  "approvals": {
+    "interface": true,
+    "tenantSetup": false,
+    "oauthRegistrationChanges": false,
+    "credentialChanges": false,
+    "infrastructure": false,
+    "stagingRelease": false,
+    "productionRelease": false,
+    "submoduleUpgrade": false
+  },
+  "invariants": [
+    "Existing production Graph functionality and tenant grants remain unchanged",
+    "No Pi token-cache, Graph-token, shared bearer, app-only or administrator-token fallback",
+    "Every caller-visible read is observation-authorized",
+    "Any potentially side-effecting dispatch waits for approved application; no annotation-only read classification for ask",
+    "Skills and fileUrls do not enforce document confinement",
+    "No blind replay after an ambiguous remote call",
+    "No synthetic WorkIQ performance test without contractual clearance",
+    "No resets or edits to unrelated submodule scratch or root AGENTS.md"
+  ],
+  "compatibilityBlockers": [
+    "Live hosted registration/credentials/consent/policy not configured or verified; separate approval required",
+    "Committed exact submodule pin plus explicit clean-applicable WorkIQ native patch; no implicit dirty-submodule dependency",
+    "Native buffered transport remains 1 MiB, not the full remote 4 MB raw file allowance"
+  ],
+  "supersedesFutureDevelopmentIn": [
+    "microsoft-sharepoint-and-work-iq.md",
+    "gatekeeper-microsoft.md"
+  ],
+  "tasks": [
+    {
+      "id": "W0",
+      "title": "Park Graph work and restore merged delivery baseline",
+      "status": "complete",
+      "dependsOn": [],
+      "acceptance": "Both Graph refs retained, new branch based on 672cadf, active Graph expansion removed, unrelated files and submodule pin preserved",
+      "verification": "git refs/status/diff checks and baseline wrapper tests",
+      "evidence": "Branch/ref/status, unchanged deployment files and pin checks passed; 35 baseline wrapper tests passed; see workiq-minimal.progress.md"
+    },
+    {
+      "id": "W1",
+      "title": "Review native MCP interface",
+      "status": "complete",
+      "dependsOn": [
+        "W0"
+      ],
+      "acceptance": "Operator approved the entire native MCP surface and all operations, including approval-gated mutations; no tool subset deferred",
+      "verification": "Standalone declaration type-check and explicit operator review",
+      "evidence": "Explicit operator approval in this conversation; declaration type-check previously passed"
+    },
+    {
+      "id": "W2",
+      "title": "Prove hosted OAuth feasibility using the smallest reusable extension",
+      "status": "implemented_locally_live_setup_gated",
+      "dependsOn": [
+        "W1"
+      ],
+      "acceptance": "Registered public/confidential client adapter preserves native PKCE, issuer and generation fences and staged reconnect; real tenant setup remains separately gated",
+      "verification": "SDK OAuth fixtures and real workerd hosted flow/reconnect; later separately approved real-user sign-in",
+      "evidence": "26 pure WorkIQ tests plus 14 real-workerd tests pass, including registered-client PKCE, exact scope pinning, single-use redemption and staged reconnect; no real hosted sign-in performed"
+    },
+    {
+      "id": "W3",
+      "title": "Implement tiny adapter and one routing skill",
+      "status": "complete",
+      "dependsOn": [
+        "W2"
+      ],
+      "acceptance": "Full catalog and generated methods, observation and exact-payload approval, durable application/rejection, no blind replay, owner-only and named grants; portable skill and optional deployment wiring; actual compiled bundle startup",
+      "verification": "Pure/workerd suites, package/scripts type checks, wrapper/patch tests, targeted lint, dry-run and compiled bundle RPC smoke",
+      "evidence": "Fresh pnpm test: 508 tests pass, including 40 WorkIQ, 324 native shared MCP and 38 wrapper/patch tests; actual compiled-bundle startup/RPC smoke, types:scripts, package types and targeted lint pass"
+    },
+    {
+      "id": "W4",
+      "title": "Verify and separately release to staging",
+      "status": "separately_gated",
+      "dependsOn": [
+        "W3"
+      ],
+      "acceptance": "Approved hosted setup and policy; normal real-user reads/downloads/interpretation and specific approved mutation fixture; denial/revocation/identity/size evidence; school contract/cost clearance, Router issue resolved and explicit staging release",
+      "verification": "Separate live setup and exact-operation approvals; protected release workflow; production remains separately gated"
+    }
+  ]
+}

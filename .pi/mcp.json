@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "workiq": {
+      "type": "http",
+      "url": "https://workiq.svc.cloud.microsoft/mcp",
+      "description": "Knox WorkIQ discovery: full live tool catalog, including entity reads, binary downloads, Copilot answering and mutation schemas. Tool availability is not permission to execute writes; obtain specific approval before any mutation. Tenant permissions and policy still apply.",
+      "timeout": 60,
+      "exposure": "deferred",
+      "oauth": {
+        "clientId": "ba081686-5d24-4bc6-a0d6-d034ecffed87",
+        "callbackPort": 12798,
+        "callbackUrl": "http://localhost:12798",
+        "scope": "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask offline_access",
+        "authServerMetadataUrl": "https://login.microsoftonline.com/3b951541-2eca-412c-9d5f-ffb43008c700/v2.0/.well-known/openid-configuration"
+      }
+    }
+  }
+}

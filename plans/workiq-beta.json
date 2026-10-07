@@ -1,0 +1,73 @@
+{
+  "slug": "workiq-beta",
+  "title": "WorkIQ owner-only beta",
+  "status": "pipeline_and_routing_guards_verified_live_setup_gated",
+  "target": "https://os-staging.knoxi.dev",
+  "proposedWorker": "knox-os-staging-gatekeeper-workiq",
+  "submodulePin": "32ce152654e8a205b54e094e31be932c620dbc52",
+  "approvals": {
+    "betaTarget": true,
+    "pipelineImplementation": true,
+    "remotePublication": true,
+    "infrastructureMutation": false,
+    "oauthRegistration": false,
+    "credentials": false,
+    "consentBillingPolicy": false,
+    "stagingRelease": false,
+    "liveMutationFixture": false,
+    "productionRelease": false
+  },
+  "tasks": [
+    {
+      "id": "B1",
+      "title": "Staging wiring and fail-closed CI/CD preflight",
+      "status": "complete",
+      "dependsOn": [],
+      "acceptance": "Preflight and wrapper regressions, explicit types, full staging dry-run, cleaned generated files, unchanged production and pin; no mutation gates opened",
+      "verification": [
+        "43 wrapper/preflight tests passed",
+        "script and WorkIQ types passed",
+        "targeted lint passed",
+        "pnpm check:staging passed: 513 tests reported, 4/13 cached test tasks; eight Worker dry-runs and compiled WorkIQ RPC smoke passed",
+        "production configuration/workflow and submodule pin unchanged; generated configs cleaned"
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "Read-only inventory and partial-staging reconciliation",
+      "status": "partial_inventory",
+      "dependsOn": [
+        "B1"
+      ],
+      "acceptance": "Sanitized current versions, routing/Access, Worker ownership, credential names and protected environment evidence with a precise repair/setup proposal",
+      "verification": [
+        "Sanitized inventory in workiq-beta-inventory.json: seven current deployments, proposed WorkIQ name absent from a 56-Worker page, active correct-account zone and expected Access audience",
+        "Protected GitHub environment remains main-only with two required reviewers; old main-SHA release is waiting, not approved",
+        "Previous failed run published all seven observed versions; HTTP redirects do not prove recovery",
+        "New token-specific zone preflight passes fixture regressions; actual CI-token visibility and custom-domain/backend exposure remain unverified",
+        "46 fresh wrapper/preflight tests, script types and targeted lint passed; full staging check passed with 516 tests reported (11/13 unchanged test tasks cached), fresh compiled bundle RPC smoke and eight Worker dry-runs"
+      ]
+    },
+    {
+      "id": "B3",
+      "title": "Separately approved private Worker and hosted OAuth setup",
+      "status": "approval_required",
+      "dependsOn": [
+        "B2"
+      ],
+      "acceptance": "Exact mutation summary approved; private identity and appropriately registered hosted credentials verified without exposure",
+      "verification": []
+    },
+    {
+      "id": "B4",
+      "title": "Separately approved staged release and real-user evidence",
+      "status": "approval_required",
+      "dependsOn": [
+        "B3"
+      ],
+      "acceptance": "Reviewed publication, exact-SHA protected release, hosted identity/read/bytes/denial evidence and separately approved mutation fixtures; no production promotion",
+      "verification": []
+    }
+  ],
+  "progress": "workiq-beta.progress.md"
+}

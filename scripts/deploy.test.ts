@@ -88,6 +88,7 @@ async function baseConfigs(): Promise<BaseConfigs> {
     scheduler: await baseConfig("../cloudflare-os/packages/gatekeeper-scheduler/wrangler.jsonc"),
     customGatekeeper: await baseConfig("../packages/custom-gatekeeper/wrangler.jsonc"),
     gatekeeperMicrosoft: await baseConfig("../packages/gatekeeper-microsoft/wrangler.jsonc"),
+    gatekeeperWorkIQ: await baseConfig("../packages/gatekeeper-workiq/wrangler.jsonc"),
     errorReporter: await baseConfig("../packages/error-reporter/wrangler.jsonc"),
   };
 }
@@ -152,14 +153,14 @@ test("private bootstrap excludes Router while full deploy keeps it last", async 
   enabled.resources.blueprintContentBucket = "stage-blueprint-bucket";
   assert.doesNotThrow(() => assertStagingDeploymentReady(enabled, false));
   assert.deepEqual(deploymentOrder(staging, true), [
-    "errorReporter", "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+    "errorReporter", "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "gatekeeperWorkIQ", "workshop",
   ]);
   assert.deepEqual(deploymentOrder(staging, false), [
     ...deploymentOrder(staging, true), "router",
   ]);
 });
 
-test("staging keeps all seven Workers and data bindings away from production", async () => {
+test("staging keeps all eight Workers and data bindings away from production", async () => {
   const production = await deploymentFile("../deployment.jsonc");
   const staging = await deploymentFile("../deployment.staging.jsonc");
   assert.doesNotThrow(() => assertStagingIsolation(staging, production));
@@ -168,7 +169,11 @@ test("staging keeps all seven Workers and data bindings away from production", a
   const stage = generateConfigs(staging, bases);
   const stageNames = new Set(Object.values(stage).map((worker) => worker.name));
   const prodNames = new Set(Object.values(prod).map((worker) => worker.name));
-  assert.equal(stageNames.size, 7);
+  assert.equal(stageNames.size, 8);
+  assert.equal(prodNames.size, 7);
+  assert.equal(prod.gatekeeperWorkIQ, undefined);
+  assert.equal(stage.gatekeeperWorkIQ!.vars!.BASE_URL, "https://os-staging.knoxi.dev/gatekeeper/workiq");
+  assert.deepEqual(stage.gatekeeperWorkIQ!.secrets!.required, ["WORKIQ_CLIENT_ID"]);
   for (const name of stageNames) assert.equal(prodNames.has(name), false);
   for (const service of [...stage.router.services!, ...stage.workshop.services!]) {
     assert.ok(stageNames.has(service.service), `binding ${service.binding} reached ${service.service}`);
@@ -201,6 +206,14 @@ test("staging keeps all seven Workers and data bindings away from production", a
   assert.equal(stage.context.kv_namespaces![0].id, staging.context.kvNamespaceId);
   assert.equal(stage.workshop.r2_buckets![0].bucket_name,
     staging.resources.blueprintContentBucket);
+});
+
+test("staging rejects a WorkIQ Worker with an unapproved same-prefix identity", async () => {
+  const production = await deploymentFile("../deployment.jsonc");
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  staging.workers.gatekeeperWorkIQ!.name = "knox-os-staging-unrelated-worker";
+  assert.throws(() => assertStagingIsolation(staging, production),
+    /knox-os-staging-gatekeeper-workiq/);
 });
 
 test("staging refuses production trust, resource and Microsoft authority", async () => {
@@ -786,4 +799,35 @@ test("skips the Error Reporter build when error reporting is disabled", () => {
   });
   const commands = buildCommands(config).map(({ args }) => args.join(" "));
   assert.equal(commands.some((command) => command.includes("error-reporter")), false);
+});
+
+test("WorkIQ is absent by default and optional bindings use the fixed hosted callback", async () => {
+  const bases = { ...await baseConfigs(),
+    gatekeeperWorkIQ: await baseConfig("../packages/gatekeeper-workiq/wrangler.jsonc") };
+  const original = generateConfigs(validConfig, bases);
+  assert.equal(original.gatekeeperWorkIQ, undefined);
+  assert.ok(!original.router.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ"));
+  const config = variant(value => { value.workers.gatekeeperWorkIQ = { name: "acme-workiq" }; });
+  const generated = generateConfigs(config, bases) as GeneratedConfigs & { gatekeeperWorkIQ: ProdWranglerConfig };
+  assert.equal(generated.gatekeeperWorkIQ.name, "acme-workiq");
+  assert.equal(generated.gatekeeperWorkIQ.vars?.BASE_URL, "https://os.example.com/gatekeeper/workiq");
+  assert.deepEqual(generated.gatekeeperWorkIQ.secrets?.required, ["WORKIQ_CLIENT_ID"]);
+  assert.ok(generated.router.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ" && binding.service === "acme-workiq" && !binding.entrypoint));
+  assert.ok(generated.workshop.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ" && binding.entrypoint === "GatekeeperVendor"));
+  assert.deepEqual(generated.gatekeeperMicrosoft, original.gatekeeperMicrosoft);
+  assert.ok(deploymentOrder(config, true).includes("gatekeeperWorkIQ" as keyof GeneratedConfigs));
+  assert.equal(deploymentOrder(config, false).at(-1), "router");
+  assert.ok(buildCommands(config).some(command => command.args.includes("@knox/gatekeeper-workiq")));
+});
+
+test("WorkIQ activation requires a base config and an isolated Worker identity", async () => {
+  const config = variant(value => { value.workers.gatekeeperWorkIQ = { name: "acme-workiq" }; });
+  assert.throws(() => generateConfigs(config, {} as BaseConfigs), /WorkIQ base config/);
+  const duplicate = variant(value => { value.workers.gatekeeperWorkIQ = { name: value.workers.gatekeeperMicrosoft.name }; });
+  assert.throws(() => validateConfig(duplicate), /unique/);
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  const production = await deploymentFile("../deployment.jsonc");
+  (staging.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
+  (production.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
+  assert.throws(() => assertStagingIsolation(staging, production), /WorkIQ.*approved identity/);
 });

@@ -1,0 +1,182 @@
+{
+  "account": "2ddaede0fbdd479a6bf410a5f1eb76ad",
+  "hostname": "os-staging.knoxi.dev",
+  "inventoryAccountVerified": true,
+  "workers": {
+    "knox-os-staging": {
+      "deploymentId": "e2ab8840-edac-4cca-b4f1-c2f35bcd4974",
+      "createdOn": "2026-10-02T02:47:26.111483Z",
+      "versions": [
+        {
+          "versionId": "45d28750-5eaa-4b36-b456-13299dc79432",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-workshop": {
+      "deploymentId": "f27b6a6e-2afb-4865-9c5f-d59d027eb993",
+      "createdOn": "2026-10-02T02:47:19.866419Z",
+      "versions": [
+        {
+          "versionId": "8389e09e-8e6d-40a9-9202-42a59978f5de",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-context": {
+      "deploymentId": "3818e19a-f777-47ce-b4a6-9851dc4701dc",
+      "createdOn": "2026-10-02T02:46:54.099022Z",
+      "versions": [
+        {
+          "versionId": "222fc539-100c-4f87-b136-d77cc2e42e3c",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-scheduler": {
+      "deploymentId": "718409b8-2271-4365-be6d-70209caeddc5",
+      "createdOn": "2026-10-02T02:46:59.0034Z",
+      "versions": [
+        {
+          "versionId": "0dd5b2ad-e5b3-49ec-b162-e3f3045aec59",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-gatekeeper": {
+      "deploymentId": "9405b7d7-4a25-4959-8f8e-4a19aeebc074",
+      "createdOn": "2026-10-02T02:47:03.86468Z",
+      "versions": [
+        {
+          "versionId": "c41145e9-418d-4e17-9c42-b6635a617c79",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-gatekeeper-microsoft": {
+      "deploymentId": "8808e2e9-e0b2-4af5-8be2-56cdaa99c928",
+      "createdOn": "2026-10-02T02:47:09.371337Z",
+      "versions": [
+        {
+          "versionId": "18dd6c1f-efb0-4c6e-9e34-ade45548b73c",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-error-reporter": {
+      "deploymentId": "f458048d-bb97-49f4-aac5-26f7a7e1f8ed",
+      "createdOn": "2026-10-02T02:46:47.955815Z",
+      "versions": [
+        {
+          "versionId": "3d5473c3-bcf9-46a4-87b2-da6567fea994",
+          "percentage": 100
+        }
+      ]
+    },
+    "knox-os-staging-gatekeeper-workiq": {
+      "status": "inventory_unavailable"
+    }
+  },
+  "credentials": {
+    "knox-os-staging-gatekeeper-microsoft": [
+      "CLIENT_ID",
+      "CLIENT_SECRET"
+    ],
+    "knox-os-staging-gatekeeper-workiq": {
+      "status": "inventory_unavailable"
+    }
+  },
+  "probes": [
+    {
+      "path": "/",
+      "status": 302,
+      "accessChallenge": true
+    },
+    {
+      "path": "/admin",
+      "status": 302,
+      "accessChallenge": true
+    },
+    {
+      "path": "/api",
+      "status": 302,
+      "accessChallenge": true
+    },
+    {
+      "path": "/gatekeeper/microsoft/oauth",
+      "status": 302,
+      "accessChallenge": true
+    },
+    {
+      "path": "/gatekeeper/workiq/oauth",
+      "status": 302,
+      "accessChallenge": true
+    }
+  ],
+  "workerCatalog": {
+    "returnedCount": 56,
+    "proposedNameObserved": false,
+    "completeSinglePage": true
+  },
+  "zones": [
+    {
+      "id": "423dd6e3814250bf304de8812e22ce4a",
+      "name": "knoxi.dev",
+      "status": "active",
+      "accountMatches": true
+    }
+  ],
+  "access": [
+    {
+      "id": "7dc8b0b2-0f4a-4438-9626-740eaddd09e2",
+      "domain": "os-staging.knoxi.dev",
+      "aud": "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012",
+      "type": "self_hosted",
+      "policies": [
+        {
+          "id": "786820df-bc94-4a58-bd1c-d41abc169df2",
+          "decision": "allow"
+        }
+      ]
+    }
+  ],
+  "observedAt": "2026-10-07T08:45:12.626Z",
+  "localSource": "e351983",
+  "submodulePin": "32ce152654e8a205b54e094e31be932c620dbc52",
+  "operation": "read_only_inventory",
+  "github": {
+    "mainSha": "672cadfc2c6874bcf780f2510522df6885264db6",
+    "mainOnly": true,
+    "preventSelfReview": false,
+    "waitingRunId": 37420111006,
+    "waitingRunSha": "672cadfc2c6874bcf780f2510522df6885264db6",
+    "configuredReviewerCount": 2,
+    "requiredApprovalCount": 1
+  },
+  "previousFailedRun": {
+    "id": 36956274641,
+    "source": "71f26dddf4b2880572845e748c6b1b2a4a7600db",
+    "conclusion": "failure",
+    "createdAt": "2026-10-02T02:34:42Z",
+    "updatedAt": "2026-10-02T02:47:44Z",
+    "deployStep": "failure",
+    "evidenceStep": "success"
+  },
+  "accessPolicyShape": {
+    "id": "786820df-bc94-4a58-bd1c-d41abc169df2",
+    "decision": "allow",
+    "includeTypes": [
+      "azureAD"
+    ],
+    "excludeTypes": [],
+    "requireTypes": []
+  },
+  "unverified": [
+    "Release token zone visibility: operator cf-profile success is not CI-token evidence",
+    "Custom-domain service mapping and alternate backend exposure: absent from cf schema inventory",
+    "Selected Entra group membership and signed-in allow/deny behavior",
+    "WorkIQ private identity provisioning and hosted OAuth registration/credentials/consent",
+    "Real WorkIQ operations, independently decoded bytes, tenant writes, eligibility and cost",
+    "Persisted upgrade/recovery rehearsal"
+  ]
+}

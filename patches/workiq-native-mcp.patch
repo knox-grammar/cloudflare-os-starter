@@ -1,0 +1,48 @@
+diff --git a/packages/mcp-shared/src/account.ts b/packages/mcp-shared/src/account.ts
+index cb67b9a5..9bf042b9 100644
+--- a/packages/mcp-shared/src/account.ts
++++ b/packages/mcp-shared/src/account.ts
+@@ -477,7 +477,7 @@ export abstract class McpAccountBase<E extends AccountEnv, P = unknown>
+   // registration and discovery at the reconnect copies, so nothing it saves or invalidates reaches
+   // the live keys before the commit. Only the code verifier is shared, since the nonce and
+   // `pendingAuth` slots already serialize flows.
+-  private oauthProvider(
++  protected oauthProvider(
+     server: ConnectedServer,
+     generation: number,
+     reconnect: boolean,
+@@ -995,11 +995,18 @@ export abstract class McpAccountBase<E extends AccountEnv, P = unknown>
+     discovery: OAuthDiscoveryState, client: StoredOAuthClientInformation,
+   ): Promise<string> {
+     try {
++      const provider = this.oauthProvider(server, generation, false);
++      const resource = provider.validateResourceURL
++        ? await provider.validateResourceURL(new URL(server.endpoint), discovery.resourceMetadata?.resource)
++        : new URL(server.endpoint);
++      if (!this.isCurrentConnection(server, generation)) {
++        throw new Error("Discarded credentials refreshed for a previous MCP connection.");
++      }
+       const refreshed = await refreshAuthorization(discovery.authorizationServerUrl, {
+         metadata: discovery.authorizationServerMetadata,
+         clientInformation: client,
+         refreshToken,
+-        resource: new URL(server.endpoint),
++        resource,
+         fetchFn: sdkFetch(this.fetchOptions()),
+       });
+       if (!this.isCurrentConnection(server, generation)) {
+diff --git a/packages/mcp-shared/src/tools.ts b/packages/mcp-shared/src/tools.ts
+index 69a8fb8e..c1501f15 100644
+--- a/packages/mcp-shared/src/tools.ts
++++ b/packages/mcp-shared/src/tools.ts
+@@ -196,8 +196,7 @@ export function describeCall(args: {
+       ? "The server declares this tool read-only, so it runs without approval. That claim comes " +
+         "from the server itself."
+       : "Treated as read-only by this deployment."
+-    : "Treated as an action because the server did not declare it read-only. Nothing has been " +
+-      "sent yet.";
++    : "Requires approval under this deployment's tool policy. Nothing has been sent yet.";
+-
++
+   // The arguments are the agent's text, and the agent is who this prompt protects the user from.
+   // They are also the whole payload of the call, so the approver must see every byte: they go in
