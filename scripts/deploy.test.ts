@@ -208,6 +208,14 @@ test("staging keeps all eight Workers and data bindings away from production", a
     staging.resources.blueprintContentBucket);
 });
 
+test("staging rejects a WorkIQ Worker with an unapproved same-prefix identity", async () => {
+  const production = await deploymentFile("../deployment.jsonc");
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  staging.workers.gatekeeperWorkIQ!.name = "knox-os-staging-unrelated-worker";
+  assert.throws(() => assertStagingIsolation(staging, production),
+    /knox-os-staging-gatekeeper-workiq/);
+});
+
 test("staging refuses production trust, resource and Microsoft authority", async () => {
   const production = await deploymentFile("../deployment.jsonc");
   const staging = await deploymentFile("../deployment.staging.jsonc");
@@ -821,5 +829,5 @@ test("WorkIQ activation requires a base config and an isolated Worker identity",
   const production = await deploymentFile("../deployment.jsonc");
   (staging.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
   (production.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
-  assert.throws(() => assertStagingIsolation(staging, production), /WorkIQ.*isolated/);
+  assert.throws(() => assertStagingIsolation(staging, production), /WorkIQ.*approved identity/);
 });

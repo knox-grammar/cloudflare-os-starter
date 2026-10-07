@@ -148,8 +148,8 @@ export function assertStagingIsolation(staging: DeploymentConfig, production: De
     }
   }
   const workiqName = staging.workers.gatekeeperWorkIQ?.name;
-  if (workiqName && (!workiqName.startsWith("knox-os-staging-") || productionNames.has(workiqName))) {
-    throw new Error("Staging WorkIQ Worker must use an isolated staging identity.");
+  if (workiqName && (workiqName !== "knox-os-staging-gatekeeper-workiq" || productionNames.has(workiqName))) {
+    throw new Error("Staging WorkIQ Worker must use its own approved identity: knox-os-staging-gatekeeper-workiq.");
   }
   if (staging.access.issuer !== "https://knoxgrammar.cloudflareaccess.com" ||
       staging.access.audience !== "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012" ||
