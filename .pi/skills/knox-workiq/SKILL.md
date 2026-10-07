@@ -1,0 +1,1 @@
+../../../packages/gatekeeper-workiq/skill.md

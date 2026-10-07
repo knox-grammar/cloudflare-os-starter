@@ -115,6 +115,8 @@ export interface DeploymentConfig {
     /** Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar). See
      * packages/gatekeeper-microsoft/ and plans/gatekeeper-microsoft.md. */
     gatekeeperMicrosoft: { name: string };
+    /** Opt-in WorkIQ MCP Worker. Absent keeps the existing deployment unchanged. */
+    gatekeeperWorkIQ?: { name: string };
     /** Only required when `errorReporting.enabled`. */
     errorReporter?: { name: string };
   };
@@ -204,6 +206,7 @@ export interface GeneratedConfigs {
   scheduler: ProdWranglerConfig;
   customGatekeeper: ProdWranglerConfig;
   gatekeeperMicrosoft: ProdWranglerConfig;
+  gatekeeperWorkIQ?: ProdWranglerConfig;
   /** Absent when `errorReporting.enabled` is false. */
   errorReporter?: ProdWranglerConfig;
 }
@@ -216,6 +219,7 @@ export interface BaseConfigs {
   scheduler: ProdWranglerConfig;
   customGatekeeper: ProdWranglerConfig;
   gatekeeperMicrosoft: ProdWranglerConfig;
+  gatekeeperWorkIQ?: ProdWranglerConfig;
   errorReporter: ProdWranglerConfig;
 }
 

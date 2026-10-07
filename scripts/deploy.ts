@@ -26,6 +26,7 @@ const packageDirs = {
   scheduler: "cloudflare-os/packages/gatekeeper-scheduler",
   customGatekeeper: "packages/custom-gatekeeper",
   gatekeeperMicrosoft: "packages/gatekeeper-microsoft",
+  gatekeeperWorkIQ: "packages/gatekeeper-workiq",
   errorReporter: "packages/error-reporter",
 } as const;
 const generatedPaths = Object.fromEntries(
@@ -145,6 +146,10 @@ export function assertStagingIsolation(staging: DeploymentConfig, production: De
     if (worker?.name !== approvedName || productionNames.has(worker.name)) {
       throw new Error(`Staging Worker ${key} must use its own approved identity: ${approvedName}.`);
     }
+  }
+  const workiqName = staging.workers.gatekeeperWorkIQ?.name;
+  if (workiqName && (!workiqName.startsWith("knox-os-staging-") || productionNames.has(workiqName))) {
+    throw new Error("Staging WorkIQ Worker must use an isolated staging identity.");
   }
   if (staging.access.issuer !== "https://knoxgrammar.cloudflareaccess.com" ||
       staging.access.audience !== "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012" ||
@@ -284,6 +289,7 @@ export function validateConfig(config: DeploymentConfig): DeploymentConfig {
     ...requiredPaths,
     ...(config.aiGateway?.enabled ? aiGatewayPaths : []),
     ...(config.errorReporting?.enabled ? errorReportingPaths : []),
+    ...(config.workers?.gatekeeperWorkIQ ? ["workers.gatekeeperWorkIQ.name"] : []),
   ];
   for (const path of activePaths) {
     const value = valueAt(config, path);
@@ -577,6 +583,11 @@ function setCommon(
 
 export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): GeneratedConfigs {
   validateConfig(config);
+  if (config.workers.gatekeeperWorkIQ && !bases.gatekeeperWorkIQ) {
+    throw new Error("WorkIQ base config is required when its Worker is enabled.");
+  }
+  const gatekeeperWorkIQ = config.workers.gatekeeperWorkIQ
+    ? structuredClone(bases.gatekeeperWorkIQ!) : undefined;
   const router = structuredClone(bases.router);
   const workshop = structuredClone(bases.workshop);
   const context = structuredClone(bases.context);
@@ -599,6 +610,7 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     // Also the OAuth redirect target: the router forwards /gatekeeper/microsoft/oauth here
     // untouched, matching this binding name's lowercased suffix.
     { binding: "GATEKEEPER_MICROSOFT", service: config.workers.gatekeeperMicrosoft.name },
+    ...(gatekeeperWorkIQ ? [{ binding: "GATEKEEPER_WORKIQ", service: config.workers.gatekeeperWorkIQ!.name }] : []),
   ];
 
   setCommon(workshop, config, config.workers.workshop.name);
@@ -670,6 +682,8 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
       service: config.workers.gatekeeperMicrosoft.name,
       entrypoint: "GatekeeperVendor",
     },
+    ...(gatekeeperWorkIQ ? [{ binding: "GATEKEEPER_WORKIQ",
+      service: config.workers.gatekeeperWorkIQ!.name, entrypoint: "GatekeeperVendor" }] : []),
   ];
   workshop.kv_namespaces = [
     { binding: "BLUEPRINTS", ...(config.resources.blueprintsKvNamespaceId
@@ -729,6 +743,11 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
     gatekeeperMicrosoft.vars.SHAREPOINT_ASSIGNED_SITE_URL = config.microsoft.assignedSiteUrl!;
   }
 
+  if (gatekeeperWorkIQ) {
+    setCommon(gatekeeperWorkIQ, config, config.workers.gatekeeperWorkIQ!.name);
+    gatekeeperWorkIQ.vars = { ...gatekeeperWorkIQ.vars, BASE_URL: `${origin}/gatekeeper/workiq` };
+    gatekeeperWorkIQ.secrets = { required: ["WORKIQ_CLIENT_ID"] };
+  }
   if (errorReporter) {
     setCommon(errorReporter, config, config.workers.errorReporter!.name);
   }
@@ -736,6 +755,7 @@ export function generateConfigs(config: DeploymentConfig, bases: BaseConfigs): G
   return {
     router, workshop, context, scheduler, customGatekeeper, gatekeeperMicrosoft,
     ...(errorReporter && { errorReporter }),
+    ...(gatekeeperWorkIQ && { gatekeeperWorkIQ }),
   };
 }
 
@@ -783,6 +803,7 @@ export function buildCommands(config: DeploymentConfig): BuildCommand[] {
     { args: submoduleBuild("@gadgets/gatekeeper-scheduler") },
     { args: ownBuild("custom-gatekeeper") },
     { args: ownBuild("gatekeeper-microsoft") },
+    ...(config.workers.gatekeeperWorkIQ ? [{ args: ownBuild("@knox/gatekeeper-workiq") }] : []),
     ...(config.errorReporting.enabled ? [{ args: ownBuild("error-reporter") }] : []),
     // Access mode is a build-time constant in the frontend bundle (`src/useAuth.ts`), so it is set
     // here rather than inherited: a bundle built under a different value is wrong, not just stale.
@@ -929,7 +950,8 @@ export function deploymentOrder(config: DeploymentConfig, bootstrap: boolean):
     (keyof GeneratedConfigs)[] {
   return [
     ...(config.errorReporting.enabled ? ["errorReporter" as const] : []),
-    "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft", "workshop",
+    "context", "scheduler", "customGatekeeper", "gatekeeperMicrosoft",
+    ...(config.workers.gatekeeperWorkIQ ? ["gatekeeperWorkIQ" as const] : []), "workshop",
     ...(!bootstrap ? ["router" as const] : []),
   ];
 }
@@ -950,6 +972,8 @@ async function main(): Promise<void> {
     scheduler: await readJsonc(join(root, packageDirs.scheduler, "wrangler.jsonc")),
     customGatekeeper: await readJsonc(join(root, packageDirs.customGatekeeper, "wrangler.jsonc")),
     gatekeeperMicrosoft: await readJsonc(join(root, packageDirs.gatekeeperMicrosoft, "wrangler.jsonc")),
+    ...(config.workers.gatekeeperWorkIQ ? { gatekeeperWorkIQ:
+      await readJsonc(join(root, packageDirs.gatekeeperWorkIQ, "wrangler.jsonc")) } : {}),
     errorReporter: await readJsonc(join(root, packageDirs.errorReporter, "wrangler.jsonc")),
   };
   const generated = generateConfigs(config, bases);

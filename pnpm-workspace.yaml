@@ -9,6 +9,9 @@ packages:
   # Microsoft OAuth reconnect uses gatekeeper-kit credential staging and connect handoff pages.
   - cloudflare-os/packages/backend-utils
   - cloudflare-os/packages/gatekeeper-kit
+  # WorkIQ wraps the pinned native MCP connector instead of copying it.
+  - cloudflare-os/packages/mcp-shared
+  - cloudflare-os/packages/gatekeeper-mcp
   - packages/*
 
 # Mirror of cloudflare-os/pnpm-workspace.yaml's catalog. Required, not merely tidy: the two

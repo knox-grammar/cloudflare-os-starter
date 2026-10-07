@@ -1,6 +1,8 @@
 # Plan: Microsoft SharePoint and Work IQ Gatekeepers
 
-Status: **Approved 2026-09-01. S0–S5 complete; S6 deployed 2026-09-02 and live authenticated verification is in progress.**
+Status: **Historical delivery record. Further Graph-first development parked 2026-10-07; next slice is the [minimal WorkIQ Gatekeeper](workiq-minimal.md).**
+
+The existing production Graph integration and tenant grants remain unchanged. Expanded Graph/save-as work is preserved on `archive/microsoft-graph-save-as` at `647eeff`. Historical decisions and completed-task evidence below are retained, but WorkIQ-first development no longer waits for the broader SharePoint implementation to finish.
 
 This plan delivers two related but deliberately separate Microsoft integrations:
 

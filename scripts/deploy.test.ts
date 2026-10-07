@@ -787,3 +787,34 @@ test("skips the Error Reporter build when error reporting is disabled", () => {
   const commands = buildCommands(config).map(({ args }) => args.join(" "));
   assert.equal(commands.some((command) => command.includes("error-reporter")), false);
 });
+
+test("WorkIQ is absent by default and optional bindings use the fixed hosted callback", async () => {
+  const bases = { ...await baseConfigs(),
+    gatekeeperWorkIQ: await baseConfig("../packages/gatekeeper-workiq/wrangler.jsonc") };
+  const original = generateConfigs(validConfig, bases);
+  assert.equal(original.gatekeeperWorkIQ, undefined);
+  assert.ok(!original.router.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ"));
+  const config = variant(value => { value.workers.gatekeeperWorkIQ = { name: "acme-workiq" }; });
+  const generated = generateConfigs(config, bases) as GeneratedConfigs & { gatekeeperWorkIQ: ProdWranglerConfig };
+  assert.equal(generated.gatekeeperWorkIQ.name, "acme-workiq");
+  assert.equal(generated.gatekeeperWorkIQ.vars?.BASE_URL, "https://os.example.com/gatekeeper/workiq");
+  assert.deepEqual(generated.gatekeeperWorkIQ.secrets?.required, ["WORKIQ_CLIENT_ID"]);
+  assert.ok(generated.router.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ" && binding.service === "acme-workiq" && !binding.entrypoint));
+  assert.ok(generated.workshop.services?.some(binding => binding.binding === "GATEKEEPER_WORKIQ" && binding.entrypoint === "GatekeeperVendor"));
+  assert.deepEqual(generated.gatekeeperMicrosoft, original.gatekeeperMicrosoft);
+  assert.ok(deploymentOrder(config, true).includes("gatekeeperWorkIQ" as keyof GeneratedConfigs));
+  assert.equal(deploymentOrder(config, false).at(-1), "router");
+  assert.ok(buildCommands(config).some(command => command.args.includes("@knox/gatekeeper-workiq")));
+});
+
+test("WorkIQ activation requires a base config and an isolated Worker identity", async () => {
+  const config = variant(value => { value.workers.gatekeeperWorkIQ = { name: "acme-workiq" }; });
+  assert.throws(() => generateConfigs(config, {} as BaseConfigs), /WorkIQ base config/);
+  const duplicate = variant(value => { value.workers.gatekeeperWorkIQ = { name: value.workers.gatekeeperMicrosoft.name }; });
+  assert.throws(() => validateConfig(duplicate), /unique/);
+  const staging = await deploymentFile("../deployment.staging.jsonc");
+  const production = await deploymentFile("../deployment.jsonc");
+  (staging.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
+  (production.workers as Record<string, unknown>).gatekeeperWorkIQ = { name: "knox-os-workiq" };
+  assert.throws(() => assertStagingIsolation(staging, production), /WorkIQ.*isolated/);
+});
