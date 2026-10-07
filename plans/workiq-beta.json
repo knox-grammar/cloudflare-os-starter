@@ -1,7 +1,7 @@
 {
   "slug": "workiq-beta",
   "title": "WorkIQ owner-only beta",
-  "status": "pipeline_verified_live_setup_gated",
+  "status": "pipeline_and_routing_guards_verified_live_setup_gated",
   "target": "https://os-staging.knoxi.dev",
   "proposedWorker": "knox-os-staging-gatekeeper-workiq",
   "submodulePin": "32ce152654e8a205b54e094e31be932c620dbc52",
@@ -35,12 +35,18 @@
     {
       "id": "B2",
       "title": "Read-only inventory and partial-staging reconciliation",
-      "status": "pending",
+      "status": "partial_inventory",
       "dependsOn": [
         "B1"
       ],
       "acceptance": "Sanitized current versions, routing/Access, Worker ownership, credential names and protected environment evidence with a precise repair/setup proposal",
-      "verification": []
+      "verification": [
+        "Sanitized inventory in workiq-beta-inventory.json: seven current deployments, proposed WorkIQ name absent from a 56-Worker page, active correct-account zone and expected Access audience",
+        "Protected GitHub environment remains main-only with two required reviewers; old main-SHA release is waiting, not approved",
+        "Previous failed run published all seven observed versions; HTTP redirects do not prove recovery",
+        "New token-specific zone preflight passes fixture regressions; actual CI-token visibility and custom-domain/backend exposure remain unverified",
+        "46 fresh wrapper/preflight tests, script types and targeted lint passed; full staging check passed with 516 tests reported (11/13 unchanged test tasks cached), fresh compiled bundle RPC smoke and eight Worker dry-runs"
+      ]
     },
     {
       "id": "B3",

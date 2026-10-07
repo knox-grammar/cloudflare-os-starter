@@ -61,6 +61,33 @@ export function assertStagingPrerequisites(staging: DeploymentConfig, inventory:
   }
 }
 
+export async function assertStagingZoneReadable(staging: DeploymentConfig, token: string,
+  fetcher: typeof fetch = fetch): Promise<void> {
+  try {
+    if (!token || staging.workers.router.route.customDomain !== "os-staging.knoxi.dev") {
+      throw new Error("Unexpected staging authority.");
+    }
+    const url = new URL("https://api.cloudflare.com/client/v4/zones");
+    url.searchParams.set("name", "knoxi.dev");
+    url.searchParams.set("account.id", staging.accountId);
+    const response = await fetcher(url, { method: "GET", redirect: "error",
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) { await response.body?.cancel(); throw new Error("Zone lookup refused."); }
+    const raw = await response.json() as { success?: boolean; result?: {
+      id?: string; name?: string; status?: string; account?: { id?: string };
+    }[] };
+    const zone = raw?.result?.[0];
+    if (raw?.success !== true || !Array.isArray(raw.result) || raw.result.length !== 1 ||
+        zone?.id !== "423dd6e3814250bf304de8812e22ce4a" || zone.name !== "knoxi.dev" ||
+        zone.status !== "active" || zone.account?.id !== staging.accountId) {
+      throw new Error("Approved active zone not visible.");
+    }
+  } catch {
+    // The operator's cf profile may see a zone the release token cannot. Never log either token or API errors.
+    throw new Error("Staging zone-read preflight failed; verify the release token's access to the approved knoxi.dev zone before deploying.");
+  }
+}
+
 export function stagingProbePaths(staging: DeploymentConfig): string[] {
   return ["/", "/admin", "/api", "/gatekeeper/microsoft/oauth",
     ...(staging.workers.gatekeeperWorkIQ ? ["/gatekeeper/workiq/oauth"] : [])];
@@ -102,6 +129,7 @@ async function main(): Promise<void> {
     { allowTrailingComma: true }) as DeploymentConfig;
   const approved = approvedReleaseConfig(staging, production);
   if (mode === "deploy") {
+    await assertStagingZoneReadable(staging, process.env.CLOUDFLARE_API_TOKEN);
     assertStagingPrerequisites(staging, {
       deployments: name => JSON.parse(command(["pnpm", "exec", "wrangler", "deployments", "list",
         "--name", name, "--json"])),
@@ -123,9 +151,13 @@ async function main(): Promise<void> {
     verificationRunUrl: `https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/${process.env.GITHUB_RUN_ID}`,
     accountId: staging.accountId,
     hostname: "os-staging.knoxi.dev",
-    workers: {}, probes: [], manualVerification: "pending", migrationRehearsal: "not-proven",
+    workers: {}, probes: [], zoneReadable: false, manualVerification: "pending", migrationRehearsal: "not-proven",
   };
   let failed = false;
+  try {
+    await assertStagingZoneReadable(staging, process.env.CLOUDFLARE_API_TOKEN);
+    evidence.zoneReadable = true;
+  } catch { failed = true; }
   for (const worker of Object.values(staging.workers)) {
     try {
       evidence.workers[worker.name] = deploymentSummary(JSON.parse(command([
