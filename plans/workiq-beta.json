@@ -8,7 +8,7 @@
   "approvals": {
     "betaTarget": true,
     "pipelineImplementation": true,
-    "remotePublication": false,
+    "remotePublication": true,
     "infrastructureMutation": false,
     "oauthRegistration": false,
     "credentials": false,

@@ -45,3 +45,7 @@ Fresh verification after final source edits:
 Remaining B2 evidence: actual release-token zone access, exact custom-domain service mapping and alternate backend exposure, selected group membership and signed-in behavior. The `cf` schema catalog lacks the account Workers Custom Domains inventory endpoint; discovery friction is logged locally, not published. No DNS or Access repair is justified from the present evidence alone.
 
 Next: publish/review source for fresh CI with approval, then complete token/routing inventory before asking for the exact private Worker and hosted OAuth setup mutation. B3/B4 remain gated; no tenant/billing/policy change, live mutation or production release.
+
+## Publication approval
+
+Operator explicitly approved pushing `feat/workiq-minimal` and opening its PR after checkpoints `e351983` and `559a860`. This is source publication approval only, not merge, protected-environment release approval, private Worker provisioning, OAuth registration/credentials, tenant consent/billing/policy, live mutations or production promotion. Publish from a clean checkout of committed files so unrelated scratch and the intentionally patched local submodule remain untouched.
