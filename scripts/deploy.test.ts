@@ -170,8 +170,14 @@ test("staging keeps all eight Workers and data bindings away from production", a
   const stageNames = new Set(Object.values(stage).map((worker) => worker.name));
   const prodNames = new Set(Object.values(prod).map((worker) => worker.name));
   assert.equal(stageNames.size, 8);
-  assert.equal(prodNames.size, 7);
-  assert.equal(prod.gatekeeperWorkIQ, undefined);
+  assert.equal(prodNames.size, 8);
+  assert.equal(prod.gatekeeperWorkIQ!.name, "knox-os-gatekeeper-workiq");
+  assert.equal(prod.gatekeeperWorkIQ!.vars!.BASE_URL, "https://os.knoxi.dev/gatekeeper/workiq");
+  assert.deepEqual(prod.workshop.kv_namespaces!.map(kv => kv.id), [
+    "44cfaa3b0d634752abac0bfb7dd111fc", "2e8610c47a5c4d0198a9d4c04d7645a7",
+  ]);
+  assert.equal(prod.context.kv_namespaces![0].id, "41215b18a40b4d0e83ecd44efb1d8cde");
+  assert.equal(prod.workshop.r2_buckets![0].bucket_name, "knox-os-workshop-blueprint-content");
   assert.equal(stage.gatekeeperWorkIQ!.vars!.BASE_URL, "https://os-staging.knoxi.dev/gatekeeper/workiq");
   assert.deepEqual(stage.gatekeeperWorkIQ!.secrets!.required, ["WORKIQ_CLIENT_ID"]);
   for (const name of stageNames) assert.equal(prodNames.has(name), false);

@@ -27,6 +27,7 @@
     // plans/microsoft-sharepoint-and-work-iq.md. Outlook and read-only SharePoint access to the
     // administrator-selected digital-utilities site are live; broader authority remains deferred.
     "gatekeeperMicrosoft": { "name": "knox-os-gatekeeper-microsoft" },
+    "gatekeeperWorkIQ": { "name": "knox-os-gatekeeper-workiq" },
 
     "errorReporter": { "name": "knox-os-error-reporter" }
   },
@@ -54,7 +55,7 @@
     // boundary and hides existing collections, so pin it to a literal once data exists.
     "sharingDomain": null,
 
-    "kvNamespaceId": null
+    "kvNamespaceId": "41215b18a40b4d0e83ecd44efb1d8cde"
   },
 
   // Agent code's Temporal `time.js` module uses this rather than the Worker runtime's UTC clock.
@@ -71,11 +72,11 @@
     "release": null
   },
 
-  // null lets Wrangler provision and remember these on first deploy.
+  // Carry existing production storage across clean CI runners; never provision replacements.
   "resources": {
-    "blueprintsKvNamespaceId": null,
-    "avatarsKvNamespaceId": null,
-    "blueprintContentBucket": null
+    "blueprintsKvNamespaceId": "44cfaa3b0d634752abac0bfb7dd111fc",
+    "avatarsKvNamespaceId": "2e8610c47a5c4d0198a9d4c04d7645a7",
+    "blueprintContentBucket": "knox-os-workshop-blueprint-content"
   },
 
   "observability": {
