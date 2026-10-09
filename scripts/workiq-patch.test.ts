@@ -8,7 +8,7 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const patch = resolve(root, "patches/workiq-native-mcp.patch");
-const pin = "32ce152654e8a205b54e094e31be932c620dbc52";
+const pin = "4f55124087d1525528697bdfdde1f15f83de740d";
 
 test("the WorkIQ extension applies to the exact pinned source and preserves unrelated edits", () => {
   const fixture = mkdtempSync(resolve(tmpdir(), "knox-workiq-patch-"));

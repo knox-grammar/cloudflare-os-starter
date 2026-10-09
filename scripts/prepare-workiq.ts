@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repository = resolve(root, "cloudflare-os");
 const patch = resolve(root, "patches/workiq-native-mcp.patch");
 const git = (args: string[]) => execFileSync("git", ["-C", repository, ...args], { stdio: "pipe" });
-if (git(["rev-parse", "HEAD"]).toString().trim() !== "32ce152654e8a205b54e094e31be932c620dbc52") {
+if (git(["rev-parse", "HEAD"]).toString().trim() !== "4f55124087d1525528697bdfdde1f15f83de740d") {
   throw new Error("WorkIQ's native extension requires the reviewed Cloudflare OS pin.");
 }
 try {
