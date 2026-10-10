@@ -14,8 +14,9 @@
     "prepare:shared": "node ../../scripts/prepare-workiq.ts"
   },
   "dependencies": {
-    "@gadgets/backend-utils": "workspace:*",
+    "@gadgets/observability": "workspace:*",
     "@gadgets/configurator-ui": "workspace:*",
+    "@gadgets/gatekeeper-kit": "workspace:*",
     "@gadgets/mcp-gatekeeper": "workspace:*",
     "@gadgets/mcp-shared": "workspace:*",
     "@gadgets/workshop-shared": "workspace:*",

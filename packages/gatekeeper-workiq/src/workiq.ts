@@ -12,7 +12,7 @@ import { McpAuthRequiredError } from "@gadgets/mcp-shared/client";
 import { fetchTools } from "@gadgets/mcp-shared/connection";
 import { handleMcpHttpRequest } from "@gadgets/mcp-shared/http";
 import { htmlResponse, connectHandoffPageHtml, INVALID_LINK_HTML } from "@gadgets/mcp-shared/html";
-import { createLogger } from "@gadgets/backend-utils/logger";
+import { createLogger } from "@gadgets/observability/logger";
 import type { McpLogFields } from "@gadgets/mcp-shared/log";
 import { sameEndpoint, requireCompleteCatalogForToolSelection } from "@gadgets/mcp-shared/scope";
 import type { GatekeeperConnectCallback, GatekeeperConnectOptions,
