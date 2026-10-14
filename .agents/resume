@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# Reconcile the small local extension after activation; no network or dependency installs.
+# The existing preparer accepts an applied patch and rejects incompatible/partial changes.
+test "$(git -C cloudflare-os rev-parse HEAD)" = "$(git rev-parse HEAD:cloudflare-os)"
+node scripts/prepare-workiq.ts

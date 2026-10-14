@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# pnpm must fail or converge without interactive reinstall prompts during startup.
+export CI=true
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+repo_root="$PWD"
+step() {
+  local label="$1"
+  shift
+  local started=$SECONDS
+  printf '\n==> %s\n' "$label"
+  "$@"
+  printf '==> %s finished in %ss\n' "$label" "$((SECONDS - started))"
+}
+
+# The orb base already supplies Node. Only install when it differs from the CI pin.
+node_major="$(tr -d 'v[:space:]' < .nvmrc)"
+if [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)" != "$node_major" ]]; then
+  export NVM_DIR="$HOME/.nvm"
+  if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
+    step 'Install nvm' git clone --depth 1 --branch v0.40.3 https://github.com/nvm-sh/nvm.git "$NVM_DIR"
+  fi
+  source "$NVM_DIR/nvm.sh"
+  step 'Install repository Node version' nvm install "$node_major"
+fi
+
+# Older orb Corepack cannot launch pnpm 11's ESM entrypoint. Use standalone pnpm.
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+pnpm_version="$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).packageManager.split("@")[1].split("+")[0]')"
+if [[ "$(pnpm --version 2>/dev/null || true)" != "$pnpm_version" ]]; then
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl --fail --silent --show-error --location https://get.pnpm.io/install.sh -o "$installer"
+  step 'Install pinned standalone pnpm' env PNPM_VERSION="$pnpm_version" SHELL=/bin/bash sh "$installer"
+  rm -f "$installer"
+  trap - EXIT
+fi
+test "$(pnpm --version)" = "$pnpm_version"
+
+# Amp and supervised services use new non-interactive login shells, not this shell.
+profile_marker='# cloudflare-os-starter orb toolchain'
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
+  export PNPM_HOME="\$HOME/.local/share/pnpm"
+  export PATH="\$PNPM_HOME:\$PATH"
+  if [[ -s "\$HOME/.nvm/nvm.sh" ]]; then
+    export NVM_DIR="\$HOME/.nvm"
+    source "\$NVM_DIR/nvm.sh" --no-use
+    nvm use --silent "\$(cat "$repo_root/.nvmrc")"
+  fi
+fi
+EOF
+fi
+
+# Never follow upstream main or discard a developer's changes on a warm snapshot.
+pin="$(git rev-parse HEAD:cloudflare-os)"
+if git -C cloudflare-os rev-parse --show-prefix >/dev/null 2>&1 &&
+    [[ -f cloudflare-os/package.json ]] &&
+    [[ "$(git -C cloudflare-os rev-parse HEAD)" != "$pin" ]] &&
+    [[ -n "$(git -C cloudflare-os status --porcelain)" ]]; then
+  echo 'Core pin changed with local submodule edits present; reconcile them before setup.' >&2
+  exit 1
+fi
+step 'Initialize reviewed core pin' git -c fetch.recurseSubmodules=false submodule update --init cloudflare-os
+test "$(git -C cloudflare-os rev-parse HEAD)" = "$pin"
+
+step 'Install wrapper workspace' pnpm install --frozen-lockfile
+step 'Install core workspace' pnpm --dir cloudflare-os install --frozen-lockfile
+step 'Prepare exact-pin WorkIQ extension' node scripts/prepare-workiq.ts
+step 'Generate native MCP configurator' pnpm --filter @gadgets/mcp-gatekeeper exec gadgets-build-configurator .
+
+echo 'Orb ready. No cloud login, credentials, upstream upgrades or deployments performed.'

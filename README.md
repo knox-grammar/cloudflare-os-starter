@@ -71,6 +71,10 @@ pnpm --dir cloudflare-os install
 pnpm exec wrangler login
 ```
 
+In Amp orbs, [the repository lifecycle scripts](docs/orbs.md) prepare both workspaces,
+the pinned toolchain, and WorkIQ's native MCP extension automatically. Do not reinstall
+dependencies on every wake. Cloud authentication and deployment remain separate, explicit steps.
+
 Your account needs [Workers](https://developers.cloudflare.com/workers/), [KV](https://developers.cloudflare.com/kv/), [R2](https://developers.cloudflare.com/r2/), [Browser Rendering](https://developers.cloudflare.com/browser-rendering/), and [Dynamic Worker Loaders](https://developers.cloudflare.com/workers/runtime-apis/bindings/worker-loader/). It also needs [Workers AI](https://developers.cloudflare.com/workers-ai/) and [AI Gateway](https://developers.cloudflare.com/ai-gateway/), which the default model catalog runs on; only turning that catalog off makes them dispensable. [Artifacts](https://developers.cloudflare.com/artifacts/) is optional.
 
 ### 2. Configure sign-in
