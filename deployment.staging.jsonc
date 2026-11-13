@@ -12,10 +12,25 @@
     "context": { "name": "knox-os-staging-context" },
     "scheduler": { "name": "knox-os-staging-scheduler" },
     "customGatekeeper": { "name": "knox-os-staging-gatekeeper" },
-    "gatekeeperMicrosoft": { "name": "knox-os-staging-gatekeeper-microsoft" },
-    // Proposed beta identity. Inventory/approve private provisioning and hosted OAuth separately.
-    "gatekeeperWorkIQ": { "name": "knox-os-staging-gatekeeper-workiq" },
+    "websearch": { "name": "knox-os-staging-gk-websearch" },
     "errorReporter": { "name": "knox-os-staging-error-reporter" }
+  },
+  "gatekeepers": {
+    // Upstream's Microsoft 365 Gatekeeper (SharePoint, OneDrive, Outlook, Calendar), delegated
+    // OAuth through the Knox Entra app. Its OAuth redirect is <origin>/gatekeeper/microsoft/oauth.
+    // Secrets CLIENT_ID, CLIENT_SECRET and MICROSOFT_TENANT_ID go on the Worker with
+    // `pnpm cf-os secrets microsoft`, never here. These vars cap what agents may do: only
+    // admin-granted SharePoint sites, read-only; Outlook drafts but never sends; Calendar edits
+    // but never invites. See cloudflare-os/packages/gatekeeper-microsoft/README.md.
+    "microsoft": {
+      "name": "knox-os-staging-gk-microsoft",
+      "vars": {
+        "MICROSOFT_SHAREPOINT_SITES": "selected",
+        "MICROSOFT_SHAREPOINT_ACCESS": "read",
+        "MICROSOFT_OUTLOOK_ACCESS": "draft",
+        "MICROSOFT_CALENDAR_ACCESS": "edit"
+      }
+    }
   },
   // Hostname-based Access app, separate from production. Policy is managed in Zero Trust.
   "access": {
@@ -23,28 +38,12 @@
     "audience": "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012",
     "admins": ["carrickm@knox.nsw.edu.au"]
   },
-  // Explicit exception: no separate Entra system exists. This is real Knox Graph data, including
-  // writes to mail/calendar after approval. Verify the approved select Access group and denied
-  // identity before installing CLIENT_ID/CLIENT_SECRET; add the staging OAuth redirect to the app.
-  "microsoft": {
-    "enabled": true,
-    "tenantId": "3b951541-2eca-412c-9d5f-ffb43008c700",
-    "assignedSiteUrl": "https://knoxnswedu.sharepoint.com/sites/digital-utilities"
-  },
-  // Explicit exception: shares AI Gateway billing and logging policy with production.
+  // Shares the account's default AI Gateway (billing and logging policy) with production.
   "aiGateway": {
     "enabled": true,
     "name": "default",
     "accountId": null,
     "providers": ["cloudflare"]
-  },
-  "staging": {
-    "sharedProductionMicrosoft": true,
-    "sharedProductionAiGateway": true,
-    // Private-only provisioning needs separate approval; never exposes the Router.
-    "bootstrapReady": false,
-    // Public release requires Access, OAuth, secret and resource-ID preflight.
-    "releaseReady": false
   },
   "context": {
     // A null sharing domain follows this staging hostname, never the production origin.
@@ -52,8 +51,8 @@
     "kvNamespaceId": "2fdcfa2c9f7b4d43be0cd89969add600",
     "artifacts": { "enabled": false }
   },
-  "agent": { "timeZone": "Australia/Sydney" },
   "customGatekeeper": {
+    "enabled": true,
     "name": "Knox staging",
     "message": "Read-only test deployment information. Do not use real user data."
   },

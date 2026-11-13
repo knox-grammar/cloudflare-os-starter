@@ -29,21 +29,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - name: Install both workspaces
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --dir cloudflare-os install --frozen-lockfile
-      - name: Prepare exact-pin WorkIQ extension and check types
-        run: |
-          node scripts/prepare-workiq.ts
-          pnpm run types:scripts
-          pnpm --filter @knox/gatekeeper-workiq run types:check
+      # The root postinstall (`cf-os install`) installs the submodule's own workspace too.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint and type-check
+        run: pnpm lint
+      # No Cloudflare credentials here: cf-os skips the account checks and dry-runs every deploy.
       - name: Check production deployment (dry-run only)
-        run: pnpm check
+        run: pnpm cf-os check
       - name: Check staging deployment (dry-run only)
-        run: pnpm check:staging
-      - name: Check private staging bootstrap (dry-run only)
-        run: pnpm check:staging:bootstrap
+        run: pnpm cf-os check --config deployment.staging.jsonc
 
   staging-preflight:
     needs: check
@@ -80,8 +75,7 @@ jobs:
       - name: Match approved SHA again
         env:
           APPROVED_SHA: ${{ github.sha }}
-        run: |
-          test "$APPROVED_SHA" = "$(git rev-parse HEAD)"
+        run: test "$APPROVED_SHA" = "$(git rev-parse HEAD)"
       - uses: pnpm/action-setup@v6
         with:
           version: 11.17.0
@@ -92,34 +86,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - name: Install both workspaces
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --dir cloudflare-os install --frozen-lockfile
-      - name: Prepare exact-pin WorkIQ extension
-        run: node scripts/prepare-workiq.ts
-      - name: Deploy approved existing staging stack (Router last)
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # cf-os verifies the account, Access application and pinned storage, builds everything, then
+      # deploys every Gatekeeper, then the Workshop, then the Router last.
+      - name: Deploy staging (Router last)
         env:
           CLOUDFLARE_ACCOUNT_ID: 2ddaede0fbdd479a6bf410a5f1eb76ad
           CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing staging environment STAGING_CLOUDFLARE_API_TOKEN'; exit 1; }
-          node scripts/staging-workflow.ts deploy
-      - name: Record versions and anonymous Access probes
-        if: always() && !cancelled()
-        env:
-          CLOUDFLARE_ACCOUNT_ID: 2ddaede0fbdd479a6bf410a5f1eb76ad
-          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
-        run: node scripts/staging-workflow.ts evidence
-      - name: Preserve staging evidence even after partial failure
-        if: always() && !cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: staging-${{ github.sha }}-${{ github.run_id }}
-          path: staging-evidence.json
-          if-no-files-found: error
-          retention-days: 30
-      - name: Manual verification reminder
-        if: always() && !cancelled()
-        run: |
-          echo 'Signed-in allowed/denied users, sole /admin access, Microsoft/WorkIQ hosted OAuth, tiny decoded WorkIQ bytes, separately approved action effects, persistence and low-cost AI still require manual evidence. Secret-name presence and anonymous Access redirects do not prove connector readiness. A successful deploy is not production or migration approval.' >> "$GITHUB_STEP_SUMMARY"
+          pnpm cf-os deploy --config deployment.staging.jsonc

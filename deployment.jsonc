@@ -22,19 +22,43 @@
     "scheduler": { "name": "knox-os-scheduler" },
     "customGatekeeper": { "name": "knox-os-gatekeeper" },
 
-    // Delegated OAuth to Microsoft Graph (Outlook Mail, Outlook Calendar, and selected SharePoint
-    // files/folders). See packages/gatekeeper-microsoft/ and
-    // plans/microsoft-sharepoint-and-work-iq.md. Outlook and read-only SharePoint access to the
-    // administrator-selected digital-utilities site are live; broader authority remains deferred.
-    "gatekeeperMicrosoft": { "name": "knox-os-gatekeeper-microsoft" },
-    "gatekeeperWorkIQ": { "name": "knox-os-gatekeeper-workiq" },
+    // The Web Search Gatekeeper, which lets agents search the public web. Ambient, like Context.
+    // Searches are billed separately from models: load AI Gateway credits on the account, or store
+    // a Ceramic key (alias "default") on the gateway. See docs/customization.md#workers-and-routing.
+    "websearch": { "name": "knox-os-gk-websearch" },
 
     "errorReporter": { "name": "knox-os-error-reporter" }
   },
 
-  // From the self-hosted Access application protecting the router hostname. Create it before
-  // deploying, then copy the team domain and the application audience tag.
-  // https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/#get-your-aud-tag
+  // Optional upstream Gatekeepers (GitHub, Slack, ...), keyed by slug, each its own Worker:
+  //   "github": { "name": "<router-name>-gk-github" }
+  // `pnpm cf-os init` offers them; `pnpm cf-os secrets` sets their OAuth credentials.
+  // Reference: docs/customization.md#optional-gatekeepers
+  "gatekeepers": {
+    // Upstream's Microsoft 365 Gatekeeper (SharePoint, OneDrive, Outlook, Calendar), delegated
+    // OAuth through the Knox Entra app. Its OAuth redirect is <origin>/gatekeeper/microsoft/oauth.
+    // Secrets CLIENT_ID, CLIENT_SECRET and MICROSOFT_TENANT_ID go on the Worker with
+    // `pnpm cf-os secrets microsoft`, never here. These vars cap what agents may do: only
+    // admin-granted SharePoint sites, read-only; Outlook drafts but never sends; Calendar edits
+    // but never invites. See cloudflare-os/packages/gatekeeper-microsoft/README.md.
+    "microsoft": {
+      "name": "knox-os-gk-microsoft",
+      "vars": {
+        "MICROSOFT_SHAREPOINT_SITES": "selected",
+        "MICROSOFT_SHAREPOINT_ACCESS": "read",
+        "MICROSOFT_OUTLOOK_ACCESS": "draft",
+        "MICROSOFT_CALENDAR_ACCESS": "edit"
+      }
+    }
+  },
+
+  // This starter deploys Cloudflare Access mode. Cloudflare OS also supports built-in password
+  // accounts and auth Gatekeeper sign-in; see the reference below before switching. The audience
+  // comes from the self-hosted Access application protecting the public hostname: `pnpm cf-os init`
+  // sets it all up, or set "admins" and `pnpm cf-os access` finds or creates that application and
+  // fills in issuer and audience.
+  // "admins" gates /admin in every sign-in method.
+  // Reference: docs/customization.md#sign-in-methods
   "access": {
     "issuer": "https://knoxgrammar.cloudflareaccess.com",
     "audience": "8623541e237ab1d2eee15a213ba7539c45e20f9e8f922c62aa6f78571c9fad6a",
@@ -58,10 +82,9 @@
     "kvNamespaceId": "41215b18a40b4d0e83ecd44efb1d8cde"
   },
 
-  // Agent code's Temporal `time.js` module uses this rather than the Worker runtime's UTC clock.
-  "agent": { "timeZone": "Australia/Sydney" },
-
+  // Displayed to agents when the example custom integration is enabled in /admin. false deploys none.
   "customGatekeeper": {
+    "enabled": true,
     "name": "Knox Grammar School",
     "message": "Read-only deployment information for the Knox OS instance. Ask about the deployment environment and configured integrations."
   },

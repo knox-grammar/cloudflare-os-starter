@@ -39,12 +39,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - name: Install both workspaces
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Validate and dry-run all Workers
-        run: pnpm check
+        run: pnpm cf-os check
 
   deploy:
     needs: check
@@ -58,6 +56,10 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
+      - name: Match the approved commit
+        env:
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+        run: test "$APPROVED_SHA" = "$(git rev-parse HEAD)"
       - uses: pnpm/action-setup@v6
         with:
           version: 11.17.0
@@ -68,24 +70,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - name: Install both workspaces
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --dir cloudflare-os install --frozen-lockfile
-      - name: Deploy in wrapper order (Router last)
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # cf-os verifies the account, Access application and pinned storage before building, then
+      # deploys every Gatekeeper, then the Workshop, then the Router last.
+      - name: Deploy (Router last)
         env:
           CLOUDFLARE_ACCOUNT_ID: 2ddaede0fbdd479a6bf410a5f1eb76ad
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          APPROVED_SHA: ${{ inputs.approved_sha }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing production environment CLOUDFLARE_API_TOKEN'; exit 1; }
-          node scripts/production-preflight.ts
-          pnpm deploy
-      - name: Retain sanitized pre-upload production inventory
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-preflight-${{ github.run_id }}-${{ github.run_attempt }}
-          path: production-preflight.json
-          if-no-files-found: warn
-          retention-days: 14
+          pnpm cf-os deploy
