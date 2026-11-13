@@ -69,9 +69,7 @@ fi
 step 'Initialize reviewed core pin' git -c fetch.recurseSubmodules=false submodule update --init cloudflare-os
 test "$(git -C cloudflare-os rev-parse HEAD)" = "$pin"
 
-step 'Install wrapper workspace' pnpm install --frozen-lockfile
-step 'Install core workspace' pnpm --dir cloudflare-os install --frozen-lockfile
-step 'Prepare exact-pin WorkIQ extension' node scripts/prepare-workiq.ts
-step 'Generate native MCP configurator' pnpm --filter @gadgets/mcp-gatekeeper exec gadgets-build-configurator .
+# The root postinstall (`cf-os install`) installs the submodule's own workspace too.
+step 'Install workspaces' pnpm install --frozen-lockfile
 
 echo 'Orb ready. No cloud login, credentials, upstream upgrades or deployments performed.'
