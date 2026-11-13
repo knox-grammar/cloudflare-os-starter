@@ -34,7 +34,23 @@
   //   "github": { "name": "<router-name>-gk-github" }
   // `pnpm cf-os init` offers them; `pnpm cf-os secrets` sets their OAuth credentials.
   // Reference: docs/customization.md#optional-gatekeepers
-  "gatekeepers": {},
+  "gatekeepers": {
+    // Upstream's Microsoft 365 Gatekeeper (SharePoint, OneDrive, Outlook, Calendar), delegated
+    // OAuth through the Knox Entra app. Its OAuth redirect is <origin>/gatekeeper/microsoft/oauth.
+    // Secrets CLIENT_ID, CLIENT_SECRET and MICROSOFT_TENANT_ID go on the Worker with
+    // `pnpm cf-os secrets microsoft`, never here. These vars cap what agents may do: only
+    // admin-granted SharePoint sites, read-only; Outlook drafts but never sends; Calendar edits
+    // but never invites. See cloudflare-os/packages/gatekeeper-microsoft/README.md.
+    "microsoft": {
+      "name": "knox-os-gk-microsoft",
+      "vars": {
+        "MICROSOFT_SHAREPOINT_SITES": "selected",
+        "MICROSOFT_SHAREPOINT_ACCESS": "read",
+        "MICROSOFT_OUTLOOK_ACCESS": "draft",
+        "MICROSOFT_CALENDAR_ACCESS": "edit"
+      }
+    }
+  },
 
   // This starter deploys Cloudflare Access mode. Cloudflare OS also supports built-in password
   // accounts and auth Gatekeeper sign-in; see the reference below before switching. The audience

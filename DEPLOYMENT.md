@@ -22,7 +22,8 @@ before making any change described here.
 | `knox-os-context` | Context Gatekeeper | none — service binding only |
 | `knox-os-scheduler` | Scheduler Gatekeeper | none — service binding only |
 | `knox-os-gatekeeper` | Custom Gatekeeper | none — service binding only |
-| `knox-os-gatekeeper-microsoft` | Microsoft Outlook and selected SharePoint Gatekeeper | none — service binding only |
+| `knox-os-gk-websearch` | Web Search Gatekeeper (upstream, ambient) | none — service binding only |
+| `knox-os-gk-microsoft` | Upstream Microsoft 365 Gatekeeper (`gatekeepers.microsoft`) | none — service binding only |
 | `knox-os-error-reporter` | Error Reporter | none — service binding only |
 
 Every Worker other than `knox-os` must always show `workers_dev: false` and
@@ -141,18 +142,9 @@ CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad \
   unexpected `pnpm-lock.yaml` diff after just running a command, suspect the
   Node version first: `node -v`, then `fnm use 24.19.0` (or install it with
   `fnm install 24.19.0`).
-- **`cloudflare-os` is its own pnpm workspace** with its own lockfile and
-  `node_modules`. `pnpm install` at the repo root does not install it.
-  Always run both:
-
-  ```sh
-  pnpm install
-  pnpm --dir cloudflare-os install
-  ```
-
-  Skipping the second step produces a confusing `tsc` failure
-  (`Unknown compiler option 'singleThreaded'`) because the submodule falls
-  back to a TypeScript version too old for its own config.
+- **`cloudflare-os` is its own pnpm workspace** with its own lockfile. The root
+  `postinstall` (`cf-os install`) installs it, so `pnpm install` is enough. After
+  `--ignore-scripts`, run `pnpm cf-os install`.
 - The submodule is pinned by gitlink, not by branch. Never run
   `git submodule update --remote`; use
   `git submodule update --init` to sync to the commit the repo already
@@ -166,117 +158,62 @@ The Knox fork is `knox-grammar/cloudflare-os-starter`; `cloudflare/cloudflare-os
 is the upstream source, not the deployment repository. `.github/workflows/check.yml` runs
 `pnpm check` on PRs and `main` without Cloudflare credentials. The separate
 `.github/workflows/deploy.yml` runs **only when manually dispatched on `main`**, requires the
-full approved commit SHA, reruns `pnpm check`, then waits for approval in the `production`
-environment before `pnpm deploy`. The environment is restricted to `main` and currently
+full approved commit SHA, reruns `pnpm cf-os check`, then waits for approval in the `production`
+environment before `pnpm cf-os deploy`. The environment is restricted to `main` and currently
 requires approval by `mylescarrick`. Neither merging nor pushing deploys production.
 
 The deploy workflow is **not activated** until an authorized operator creates a scoped
 `CLOUDFLARE_API_TOKEN` as a **production environment secret** in the Knox fork. Never put
 it in a repository secret, tracked file, or chat. Scope it to the Knox account and route and
 verify the actual required Workers/KV/R2/zone permissions; do not grant unrelated accounts.
-No token was installed during the workflow setup. If Microsoft or Workshop secrets are missing
-on a new Worker identity, install them separately by the approved interactive procedure;
-`pnpm deploy` does not provision those secrets.
+No token was installed during the workflow setup. `cf-os deploy` does not set Gatekeeper
+secrets: install the Microsoft 365 Worker's with `pnpm cf-os secrets microsoft` (add
+`--config deployment.staging.jsonc` for staging) after its Worker exists.
 
 Before approving a production workflow run, use the operator skill and
-[`plans/cloudflare-os-upgrade-2026-09.md`](plans/cloudflare-os-upgrade-2026-09.md): rehearse
-migration `v3`, verify Access and storage ownership, inventory current deployment versions,
-review the per-Worker rollback matrix and get explicit production mutation approval. The
-workflow's dry-run cannot prove remote ownership or the existing-data migration. After the
+[`plans/cloudflare-os-upgrade-2026-11.md`](plans/cloudflare-os-upgrade-2026-11.md). The
+deployment is experimental and its existing data is disposable by operator decision, so no
+migration rehearsal gates it; Access, storage ownership and version inventory still do. After the
 run, record all new version IDs here and verify the live site; a successful Action alone is
-not live verification. A failure partway through the seven Workers is not automatically rolled
+not live verification. A failure partway through the eight Workers is not automatically rolled
 back; stop and inspect remote state before retrying.
 
-## Staging (deployed, signed-in verification pending)
+## Staging
 
-The approved private bootstrap and subsequent public staging release succeeded. Resource
-identities are pinned in `deployment.staging.jsonc`; both mutation gates are closed again.
-See [`plans/staging-public-release-record.md`](plans/staging-public-release-record.md) for
-version IDs, anonymous Access checks and remaining signed-in verification. No production
-release is authorized by this staging smoke test.
+`deployment.staging.jsonc` is a separate eight-Worker stack on `os-staging.knoxi.dev`, with its
+own Worker names, Access AUD and pinned KV/R2, and only `carrickm@knox.nsw.edu.au` in `/admin`.
+It shares the account's `default` AI Gateway and the Knox Entra app with production; the
+staging Microsoft 365 Worker needs its own redirect,
+`https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`, registered on that app. Microsoft
+OAuth reaches real mail, calendar and SharePoint data. The `gatekeepers.microsoft.vars` caps
+keep agents to selected sites read-only, Outlook drafts (no sending) and calendar edits (no
+invitations).
 
-`deployment.staging.jsonc` is a separate seven-Worker config on the approved hostname
-`os-staging.knoxi.dev`, with its own Access AUD and only `carrickm@knox.nsw.edu.au` in
-`/admin`. The wrapper uses **one** config generator/build/deploy order for both targets.
-`pnpm check:staging` runs tests, builds and seven Wrangler dry-runs without touching Cloudflare;
-`pnpm check:staging:bootstrap` dry-runs only the six private Workers. CI runs both after
-`pnpm check`. Never edit temporary `wrangler.prod.jsonc` files.
-
-Staging shares two external services with production **by explicit operator approval**:
-the Entra app/tenant/assigned SharePoint site, and the `default` AI Gateway (including its
-billing and logging policy). Worker identities and persisted storage remain separate. Only
-the staging Microsoft Worker may receive the existing OAuth app credentials, and its OAuth
-redirect must be separately registered as
-`https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`. Microsoft OAuth accesses real
-mail, calendar and assigned-site data; approved mail/calendar actions can change real data.
-
-Both live commands are **blocked before remote mutation**. After separate provisioning
-approval, change only `staging.bootstrapReady` in the reviewed config, then
-`pnpm deploy:staging:bootstrap` can create six **private** Workers and four new KV/R2
-resources; it never deploys the Router. Record and pin all four generated storage IDs/names,
-then separately review the OAuth credential bootstrap and public release. `pnpm deploy:staging`
-requires `staging.releaseReady: true` **and** all four storage identities pinned, even if
-bootstrap already passed. A passing dry-run is not provisioning or public-release approval.
-The operator approved the existing select staging Access group, which includes
-`carrickm@knox.nsw.edu.au`, while `/admin` remains exclusive to that address. Before
-changing the reviewed flag, independently confirm the application's exact Allow group,
-hostname, IdP and absence of Bypass/Everyone, and verify an allowed member and a denied
-identity. Register and check the exact OAuth redirect, plan the Worker-scoped secret bootstrap
-without exposing values or accidentally deploying a public Router, and agree on read-only
-Microsoft tests and an AI spend/logging limit. **Every allowed member can connect their own
-real Microsoft account** because the ordinary Gatekeeper is enabled by default; `/admin`
-alone does not restrict connector access. `pnpm secrets:set` targets production, **never**
-use it for staging. Keep the staging deployment workflow protected.
-See
-[`plans/staging-operations.md`](plans/staging-operations.md) for first-deploy resource identities,
-existing-data rehearsal, negative Access checks and the production release gate.
+Check and deploy it with the same CLI: `pnpm cf-os check --config deployment.staging.jsonc`
+and `pnpm cf-os deploy --config deployment.staging.jsonc`. Never edit temporary
+`wrangler.prod.jsonc` files.
 
 ### Combined checks and staging approval
 
-`.github/workflows/check.yml` is the single delivery workflow. Pull requests run credential-free
-checks only. Each push to `main` checks production, staging and private bootstrap once, then
-requests **staging Environment approval**. No Cloudflare token is available before that approval.
-Manual dispatch on `main` remains available for a deliberate fresh check/redeployment.
-The deploy job updates the **existing** stack, never bootstraps Workers or installs OAuth secrets.
-Production deployment remains separate and unchanged. Both checkout jobs pin the same event SHA;
-there is no separate SHA input or second dry-run workflow.
-
-Before first use, separately configure GitHub Environment **`staging`** with a required reviewer,
-exactly one custom deployment branch rule (`main`, type `branch`), and the environment secret
-**`STAGING_CLOUDFLARE_API_TOKEN`**. The workflow fails if reviewer/branch protection is missing;
-the dedicated secret name avoids falling back to the production token. The operator configured
-reviewers `mylescarrick`/`nickec86`, self-review allowed, exactly one Branch `main` rule, and the
-secret. These protections passed hosted preflight. The first scoped-token deployment failed at
-Router zone lookup (run `36956274641`); token/Custom Domain compatibility remains unresolved.
-Do not broaden permissions or retry automatically. No GitHub settings are created by this code.
-
-After merging, use the **Check and staging** run for that main commit. After checks and protection
-preflight pass, review its exact SHA and approve the staging job when deployment is wanted.
-Reject superseded pending requests; never silently switch the checked SHA to newer main.
-The helper verifies existing Worker deployments, Microsoft secret names and pinned storage before
-opening the release gate only in the runner's temporary config and restoring it afterward.
-Tracked gates stay closed. Deployment-job concurrency serializes staging mutations without
-canceling active deployments or blocking checks for other commits. Feature-branch manual runs
-perform checks only, with no staging approval request or credentials.
-
-The job records sanitized current deployment/version IDs and anonymous Access probes in a
-**30-day** artifact, including partial deployment failures, linked to the same run's `check` job. It retains no cookies, redirects,
-response bodies, author emails or deployment annotations. If any deploy or probe fails, stop,
-inventory the seven Workers and review recovery; no automatic retry or rollback. Versions in
-the artifact describe observed account state, not proof that every Worker deployed the requested
-SHA. A canceled run may have no artifact. Signed-in user/admin/Microsoft and persistence checks
-remain manual; a green run is not migration rehearsal or production release approval.
+`.github/workflows/check.yml` is the single delivery workflow. Pull requests run lint and both
+dry-runs without credentials. Each push to `main` runs them once, checks that the `staging`
+Environment still has a required reviewer and a `main`-only branch rule, then requests staging
+approval. Only after approval does the job receive `STAGING_CLOUDFLARE_API_TOKEN` and run
+`cf-os deploy --config deployment.staging.jsonc`, which verifies the account, Access application
+and pinned storage before building and deploys the Router last. Reject superseded pending
+requests rather than approving an older SHA. A failure partway through is not rolled back: stop
+and inspect the Workers before retrying. Signed-in checks remain manual.
 
 ## Routine operations
 
-- **Deploy a config change:** edit `deployment.jsonc`, run `pnpm check`,
+- **Deploy a config change:** edit `deployment.jsonc`, run `pnpm cf-os check`,
   review the dry-run bindings, get approval for anything touching the trust
-  boundary (see the operator skill), then `pnpm deploy`. Update the version
+  boundary (see the operator skill), then `pnpm cf-os deploy`. Update the version
   ID table above afterward.
 - **Only one `pnpm check`/`pnpm deploy` at a time** against this checkout.
   Use a separate worktree for concurrent work.
-- **Upgrading the pinned `cloudflare-os` commit** is a distinct, higher-risk
-  operation — follow
+- **Upgrading** is `pnpm cf-os update` (starter merge) or `pnpm cf-os update --upstream`
+  (core `main`), then the `.cf-os/update.md` checklist — follow
   [`references/upgrade-and-rollback.md`](.agents/skills/cloudflare-os-operator/references/upgrade-and-rollback.md)
   rather than bumping the gitlink casually.
 - **Rollback** is per-Worker and not atomic. Use the version IDs above as the
@@ -291,5 +228,6 @@ remain manual; a green run is not migration rehearsal or production release appr
 - [ ] Review `packages/custom-gatekeeper` before enabling it for real use.
 - [ ] Decide whether `.mcp.json` at the repo root should be tracked or
       gitignored.
-- [ ] Add a `.nvmrc`/`.node-version` pinning `24.19.0` to prevent the
-      lockfile-drift issue above from recurring for the next operator.
+- [ ] Delete the retired `knox-os-gatekeeper-microsoft` and
+      `knox-os-gatekeeper-workiq` Workers (and staging equivalents) once the new stack is
+      verified. Deleting them discards their stored Microsoft connections.

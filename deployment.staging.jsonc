@@ -15,7 +15,23 @@
     "websearch": { "name": "knox-os-staging-gk-websearch" },
     "errorReporter": { "name": "knox-os-staging-error-reporter" }
   },
-  "gatekeepers": {},
+  "gatekeepers": {
+    // Upstream's Microsoft 365 Gatekeeper (SharePoint, OneDrive, Outlook, Calendar), delegated
+    // OAuth through the Knox Entra app. Its OAuth redirect is <origin>/gatekeeper/microsoft/oauth.
+    // Secrets CLIENT_ID, CLIENT_SECRET and MICROSOFT_TENANT_ID go on the Worker with
+    // `pnpm cf-os secrets microsoft`, never here. These vars cap what agents may do: only
+    // admin-granted SharePoint sites, read-only; Outlook drafts but never sends; Calendar edits
+    // but never invites. See cloudflare-os/packages/gatekeeper-microsoft/README.md.
+    "microsoft": {
+      "name": "knox-os-staging-gk-microsoft",
+      "vars": {
+        "MICROSOFT_SHAREPOINT_SITES": "selected",
+        "MICROSOFT_SHAREPOINT_ACCESS": "read",
+        "MICROSOFT_OUTLOOK_ACCESS": "draft",
+        "MICROSOFT_CALENDAR_ACCESS": "edit"
+      }
+    }
+  },
   // Hostname-based Access app, separate from production. Policy is managed in Zero Trust.
   "access": {
     "issuer": "https://knoxgrammar.cloudflareaccess.com",
