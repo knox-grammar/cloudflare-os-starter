@@ -81,20 +81,31 @@ skill before customizing or enabling it for real use.
 ## Current version IDs (last-known-good)
 
 Deployed 2026-11-14 by the "Deploy production" workflow
-([run 43568281855](https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/43568281855))
-from root `13dbd9e`, core `769474e`. Worker version rollback of `knox-os-workshop` after a
-workspace has woken is unsafe; this deploy added Durable Object migration v4.
+([run 43582175726](https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/43582175726))
+from root `369ed33`, core `769474e`: the `knox-os` AI Gateway. Worker version rollback of
+`knox-os-workshop` after a workspace has woken is unsafe; the upgrade added Durable Object
+migration v4.
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `de45360f-371b-4000-856a-804b5dcab5fe` |
-| `knox-os-workshop` | `429aed7a-ddb9-4a01-9d11-ddc015fbc8a6` |
-| `knox-os-context` | `3a46d9ba-c0cd-44d3-84de-500e443b8e5b` |
-| `knox-os-scheduler` | `2013f70a-ac69-4fa5-b338-5d546eb8b6e0` |
-| `knox-os-gatekeeper` | `7df9b58d-01a5-4ded-8a71-1064662f56fd` |
-| `knox-os-gk-websearch` | `f4e4d929-d883-458d-a61b-c1ff166e956f` |
-| `knox-os-gk-microsoft` | `729391d7-d10b-45f4-b01d-2a87bdfb3093` (code; `cf-os secrets` then added a secrets-only version) |
-| `knox-os-error-reporter` | `4afd15e9-e0fb-444f-9cb8-d0f7049b4326` |
+| `knox-os` | `c08905e7-94c7-491a-82ee-220423ceb25e` |
+| `knox-os-workshop` | `8ce7bd13-7cd6-4c0e-b747-997002f7465d` |
+| `knox-os-context` | `e886902d-dc6e-495d-be11-a809ad6e67ee` |
+| `knox-os-scheduler` | `053d01c3-d8e4-476a-86e1-3d9d61db8b65` |
+| `knox-os-gatekeeper` | `f26ff76d-f8e1-4cdd-bea1-26b8979bd469` |
+| `knox-os-gk-websearch` | `710b581d-018a-4373-bac6-d95c7d928705` |
+| `knox-os-gk-microsoft` | `23ff01c8-fdd8-46bd-b584-873ac3de9bb6` |
+| `knox-os-error-reporter` | `c4b2d9f2-5f32-4c91-8b38-8d33b550791c` |
+
+Previous (2026-11-14, root `13dbd9e`, `default` gateway): `knox-os`
+`de45360f-371b-4000-856a-804b5dcab5fe`, `knox-os-workshop`
+`429aed7a-ddb9-4a01-9d11-ddc015fbc8a6`, `knox-os-context`
+`3a46d9ba-c0cd-44d3-84de-500e443b8e5b`, `knox-os-scheduler`
+`2013f70a-ac69-4fa5-b338-5d546eb8b6e0`, `knox-os-gatekeeper`
+`7df9b58d-01a5-4ded-8a71-1064662f56fd`, `knox-os-gk-websearch`
+`f4e4d929-d883-458d-a61b-c1ff166e956f`, `knox-os-gk-microsoft` (secrets-only version after
+`729391d7-d10b-45f4-b01d-2a87bdfb3093`), `knox-os-error-reporter`
+`4afd15e9-e0fb-444f-9cb8-d0f7049b4326`.
 
 Immediate pre-upgrade rollback targets (2026-11-14, deployed 2026-10-09 from a local machine):
 `knox-os` `67aed6e5-8942-4788-bff7-cd0daac390bd`, `knox-os-workshop`

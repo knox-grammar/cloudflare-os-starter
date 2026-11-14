@@ -37,7 +37,9 @@ Workshop data and Microsoft connections are disposable by operator decision (202
    and `https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`.
 3. After the first deploy creates each Worker, set `CLIENT_ID`, `CLIENT_SECRET` and
    `MICROSOFT_TENANT_ID` with `pnpm cf-os secrets microsoft` (plus `--config` for staging).
-4. Load AI Gateway credits or a Ceramic key for Web Search, or its searches fail.
+4. Load AI Gateway credits or a Ceramic key for Web Search, or its searches fail. Done: both
+   stacks search through the `knox-os` gateway on the Knox account's credits, verified with a
+   live search on 2026-11-14.
 
 ## Verification
 
