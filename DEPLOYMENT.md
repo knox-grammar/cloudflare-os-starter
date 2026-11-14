@@ -53,9 +53,12 @@ Context Artifacts (Git-backed collections) is **disabled**.
 
 ## AI
 
-AI Gateway `default`, provider `cloudflare` only (Workers AI). Reached over the
-Workshop's `WORKERS_AI` binding, which is pre-authenticated in-account — no
-`CF_AI_GATEWAY_API_TOKEN` is configured or needed for this provider set. Adding
+AI Gateway `knox-os` (both stacks), provider `cloudflare` only (Workers AI). Web Search
+searches through the same gateway. Both reach it over Workers AI bindings, which are
+pre-authenticated in-account, so the gateway's required authentication needs no
+`CF_AI_GATEWAY_API_TOKEN` for this provider set. Searches spend the Knox account's AI Gateway
+credits; Workers AI chat spends them only while the gateway's Workers AI billing is set to
+Unified billing. Adding
 `anthropic`/`openai`/`google` later changes that; see
 [`docs/customization.md#ai-models`](docs/customization.md#ai-models) before
 changing `aiGateway.providers`.
@@ -101,8 +104,9 @@ Immediate pre-upgrade rollback targets (2026-11-14, deployed 2026-10-09 from a l
 `62539468-5934-4900-b87c-a851253ebd38`, `knox-os-gatekeeper-microsoft`
 `8711b39d-4d45-4053-8aed-935054c61d78`, `knox-os-gatekeeper-workiq`
 `fb280a3e-9a02-4cbd-ae78-ea15f1cb3ed3`, `knox-os-error-reporter`
-`86f51f7f-fb1a-4e8c-978b-47a38ae58c29`. The retired Microsoft and WorkIQ Workers are no longer
-bound; rolling the Workshop back is unsafe for the reason above.
+`86f51f7f-fb1a-4e8c-978b-47a38ae58c29`. The retired Microsoft and WorkIQ Workers, in both stacks,
+were deleted on 2026-11-14, so their version IDs above are history, not targets; rolling the
+Workshop back is unsafe for the reason above.
 
 Immediate pre-OS-upgrade rollback targets (2026-09-02; Workshop storage may already be
 migrated): `knox-os` `28897f6b-3ef7-4f8f-8d62-ac500de59ba2`, `knox-os-workshop`
@@ -196,7 +200,7 @@ back; stop and inspect remote state before retrying.
 
 `deployment.staging.jsonc` is a separate eight-Worker stack on `os-staging.knoxi.dev`, with its
 own Worker names, Access AUD and pinned KV/R2, and only `carrickm@knox.nsw.edu.au` in `/admin`.
-It shares the account's `default` AI Gateway and the Knox Entra app with production; the
+It shares the account's `knox-os` AI Gateway and the Knox Entra app with production; the
 staging Microsoft 365 Worker needs its own redirect,
 `https://os-staging.knoxi.dev/gatekeeper/microsoft/oauth`, registered on that app. Microsoft
 OAuth reaches real mail, calendar and SharePoint data. The `gatekeepers.microsoft.vars` caps
@@ -273,6 +277,5 @@ Granted sites:
 - [ ] Review `packages/custom-gatekeeper` before enabling it for real use.
 - [ ] Decide whether `.mcp.json` at the repo root should be tracked or
       gitignored.
-- [ ] Delete the retired `knox-os-gatekeeper-microsoft` and
-      `knox-os-gatekeeper-workiq` Workers (and staging equivalents) once the new stack is
-      verified. Deleting them discards their stored Microsoft connections.
+- [x] Delete the retired `knox-os-gatekeeper-microsoft` and
+      `knox-os-gatekeeper-workiq` Workers and their staging equivalents (2026-11-14).

@@ -65,11 +65,12 @@
     "admins": ["carrickm@knox.nsw.edu.au"]
   },
 
-  // Workers AI through the account's own AI Gateway. Reached over the Workshop's WORKERS_AI
-  // binding, which is pre-authenticated in-account, so no CF_AI_GATEWAY_API_TOKEN is needed.
+  // Workers AI through the account's own `knox-os` AI Gateway, which Web Search searches through
+  // too. Reached over the WORKERS_AI and AI bindings, which are pre-authenticated in-account, so the
+  // gateway's required authentication needs no CF_AI_GATEWAY_API_TOKEN.
   "aiGateway": {
     "enabled": true,
-    "name": "default",
+    "name": "knox-os",
     "accountId": null,
     "providers": ["cloudflare"]
   },

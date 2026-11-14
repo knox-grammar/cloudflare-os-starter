@@ -38,10 +38,11 @@
     "audience": "730ae2673d0c4a9b31ff154002657ef2af54a232426b932bc4a872327b582012",
     "admins": ["carrickm@knox.nsw.edu.au"]
   },
-  // Shares the account's default AI Gateway (billing and logging policy) with production.
+  // Shares the account's `knox-os` AI Gateway (billing and logging policy) with production. The
+  // bindings are pre-authenticated in-account, so it needs no CF_AI_GATEWAY_API_TOKEN.
   "aiGateway": {
     "enabled": true,
-    "name": "default",
+    "name": "knox-os",
     "accountId": null,
     "providers": ["cloudflare"]
   },
