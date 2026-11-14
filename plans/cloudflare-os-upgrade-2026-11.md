@@ -52,4 +52,4 @@ Workshop data and Microsoft connections are disposable by operator decision (202
 
 Workers rollback cannot undo `v4` or Workshop writes. With disposable data, recovery is a
 forward fix or a fresh stack. The retired `knox-os-gatekeeper-microsoft` and
-`knox-os-gatekeeper-workiq` Workers stay in the account, unbound, until deleted deliberately.
+`knox-os-gatekeeper-workiq` Workers, and their staging equivalents, were deleted on 2026-11-14.

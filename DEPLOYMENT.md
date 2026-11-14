@@ -165,7 +165,7 @@ CLOUDFLARE_ACCOUNT_ID=2ddaede0fbdd479a6bf410a5f1eb76ad \
 
 ## Local environment notes
 
-- **Node 24.19+ is required.** A checkout on Node 24.18 silently rewrote
+- **Node 24.19+ is required** (`engines`); `.nvmrc` pins 26, which CI and orbs use. A checkout on Node 24.18 silently rewrote
   `pnpm-lock.yaml` (downgrading TypeScript 7 → 5.9.3 and capnweb 0.11 → 0.8)
   the first time a `pnpm`/`wrangler` command ran here. If you ever see an
   unexpected `pnpm-lock.yaml` diff after just running a command, suspect the
@@ -286,7 +286,7 @@ Granted sites:
       intended user population, then re-verify with a positive and a negative
       identity.
 - [ ] Review `packages/custom-gatekeeper` before enabling it for real use.
-- [ ] Decide whether `.mcp.json` at the repo root should be tracked or
-      gitignored.
+- [x] Decide whether `.mcp.json` at the repo root should be tracked: it no longer exists
+      (2026-11-14).
 - [x] Delete the retired `knox-os-gatekeeper-microsoft` and
       `knox-os-gatekeeper-workiq` Workers and their staging equivalents (2026-11-14).
