@@ -36,6 +36,30 @@ pnpm cf-os check
 There is no automatic dev server: if needed, start one through Amp's supervised orb services.
 Portal metadata under `.amp/portals/` and `cf-os update`'s `.cf-os/` brief are ignored.
 
+## Interactive Cloudflare access
+
+For hands-on operator work from an orb, such as reading Workers Logs, inspecting resources or
+creating placeholder Workers, sign in with the repository's `cf` CLI through the OAuth device
+flow. Do not create an API token for it: a token outlives the task and is easy to forget.
+
+```sh
+pnpm exec cf auth login --no-browser --no-use-keyring   # prints a device link and code
+pnpm exec cf auth whoami                                 # account, scopes and expiry
+# ... the work ...
+pnpm exec cf auth logout                                 # removes the stored credential
+```
+
+- Agents run the login in the thread's Terminal tab, so the operator sees the code and approves
+  it at `https://dash.cloudflare.com/oauth2/device/verify` on any signed-in device.
+- The access token is short-lived (about an hour). `--no-use-keyring` stores it, together with a
+  refresh token, in `~/.config/cloudflare/config/default.json` on that orb only, because orbs have
+  no OS keychain. Log out when the task is done rather than leaving the refresh token behind.
+- Prefer `cf` commands, such as `cf o11y telemetry query`. A script that calls the API directly
+  may read `oauth_token` from that file into an environment variable; never print it, and never
+  copy it into setup, `.amp/in/orb-backup/`, a snapshot or the repository.
+- Long-lived tokens are for CI only: `CLOUDFLARE_API_TOKEN` and `STAGING_CLOUDFLARE_API_TOKEN`
+  as GitHub environment secrets.
+
 ## Three ownership boundaries
 
 | Layer | Source of truth | How changes arrive |

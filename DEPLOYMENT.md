@@ -204,6 +204,37 @@ and pinned storage before building and deploys the Router last. Reject supersede
 requests rather than approving an older SHA. A failure partway through is not rolled back: stop
 and inspect the Workers before retrying. Signed-in checks remain manual.
 
+## SharePoint sites (`Sites.Selected`)
+
+`MICROSOFT_SHAREPOINT_SITES=selected` makes connections ask for delegated `Sites.Selected`, so
+Microsoft lets agents into a SharePoint site only when the user can open it *and* the site has
+been granted to the Knox Entra app. Grants belong to the app's client ID, not to a Worker, so
+production and staging share them and redeploys never touch them. Nothing in this repository
+or the Workers can create them.
+
+A tenant admin grants a site in [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer),
+signed in as themselves and consenting to `Sites.FullControl.All` for Graph Explorer only:
+
+```http
+GET https://graph.microsoft.com/v1.0/sites/knoxnswedu.sharepoint.com:/sites/<site>?$select=id
+
+POST https://graph.microsoft.com/v1.0/sites/<id from above>/permissions
+{ "roles": ["read"], "grantedToIdentities": [{ "application": { "id": "<Entra client ID>", "displayName": "Knox OS" } }] }
+```
+
+- `GET …/sites/<id>/permissions` lists a site's grants; `DELETE …/sites/<id>/permissions/<permission id>`
+  removes one. Removing consent to `Sites.Selected` removes every site at once.
+- Use `"read"` unless a site should take agent writes; `MICROSOFT_SHAREPOINT_ACCESS=read` caps
+  every site at read anyway.
+- Upstream's full description: `cloudflare-os/packages/gatekeeper-microsoft/README.md`,
+  "Only selected sites".
+
+Granted sites:
+
+| Site | Role | Granted |
+| --- | --- | --- |
+| `https://knoxnswedu.sharepoint.com/sites/digital-utilities` | `read` | 2026-09-02 |
+
 ## Routine operations
 
 - **Deploy a config change:** edit `deployment.jsonc`, run `pnpm cf-os check`,
