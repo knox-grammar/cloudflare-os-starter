@@ -1,6 +1,6 @@
 # Knox OS staging and release operations (proposal, no resources created)
 
-Status: **staging deployed; protected workflow merged and first scoped-token run failed at Router zone lookup**. The next delivery workflow is described in `plans/ci-staging-consolidation.md`, which supersedes the separate manual workflow design below. See `plans/staging-bootstrap-record.md` and `plans/staging-public-release-record.md` for provisioning and verification evidence. Production remains `os.knoxi.dev`; no production deploy is authorized by this plan. The account is `2ddaede0fbdd479a6bf410a5f1eb76ad`. The intended first release candidate is root commit `6ca9188a4bae0ece78e609fb3e4668c87a1c25c9` with Cloudflare OS gitlink `32ce152654e8a205b54e094e31be932c620dbc52`. Reconfirm both when implementation starts.
+Status: **staging deployed; protected workflow merged and first scoped-token run failed at Router zone lookup**. The next delivery workflow is described in `plans/archive/ci-staging-consolidation.md`, which supersedes the separate manual workflow design below. See `plans/archive/staging-bootstrap-record.md` and `plans/archive/staging-public-release-record.md` for provisioning and verification evidence. Production remains `os.knoxi.dev`; no production deploy is authorized by this plan. The account is `2ddaede0fbdd479a6bf410a5f1eb76ad`. The intended first release candidate is root commit `6ca9188a4bae0ece78e609fb3e4668c87a1c25c9` with Cloudflare OS gitlink `32ce152654e8a205b54e094e31be932c620dbc52`. Reconfirm both when implementation starts.
 
 ## Decision
 
@@ -65,4 +65,4 @@ Implementation state: the separate config, target selector, isolation tests and 
 - [Worker Previews resources and current service-binding limitation](https://developers.cloudflare.com/workers/previews/resources/#service-bindings)
 - [Wrangler environments for persistent Worker identities](https://developers.cloudflare.com/workers/wrangler/environments/)
 - [Access self-hosted application](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)
-- [Upgrade and rollback rules](../.agents/skills/cloudflare-os-operator/references/upgrade-and-rollback.md)
+- [Upgrade and rollback rules](../../.agents/skills/cloudflare-os-operator/references/upgrade-and-rollback.md)

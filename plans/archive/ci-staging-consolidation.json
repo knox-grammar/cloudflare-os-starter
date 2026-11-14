@@ -1,7 +1,7 @@
 {
   "slug": "ci-staging-consolidation",
   "state": "verified-awaiting-review",
-  "plan": "plans/ci-staging-consolidation.md",
+  "plan": "plans/archive/ci-staging-consolidation.md",
   "decisionNeeded": "Lifecycle change approved; commit/PR and merge approval remain separate",
   "tasks": [
     {

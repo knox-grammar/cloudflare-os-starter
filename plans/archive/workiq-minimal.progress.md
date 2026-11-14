@@ -21,7 +21,7 @@ Shared transport buffers at 1 MiB and retained action results are bounded at 128
 ### Fresh verification
 
 - `node --test 'scripts/**/*.test.ts'`: **35 passed**, zero failures.
-- `pnpm exec tsc --ignoreConfig --noEmit --skipLibCheck --target es2022 plans/workiq-minimal-interface.d.ts`: exit 0. pnpm reconciled the baseline workspace installation; no dependency manifest/lockfile change was intended.
+- `pnpm exec tsc --ignoreConfig --noEmit --skipLibCheck --target es2022 plans/archive/workiq-minimal-interface.d.ts`: exit 0. pnpm reconciled the baseline workspace installation; no dependency manifest/lockfile change was intended.
 - Node assertions: parked and original Graph refs match; active branch/base match; gitlink unchanged; separate approval flags false; task dependencies valid; expanded Graph provider absent; Pi configuration, assessment and root `AGENTS.md` preserved. Passed.
 - `git diff --check`: passed. Deployment configurations, wrapper scripts, CI workflows and package/workspace manifests match the merged baseline.
 

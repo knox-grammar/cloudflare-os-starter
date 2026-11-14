@@ -50,4 +50,4 @@ Natural live token refresh remains normal-use follow-up, not a launch prerequisi
 
 - [Worker rollback constraints](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/).
 - [Durable Object lifecycle deployment constraints](https://developers.cloudflare.com/workers/versions-and-deployments/gradual-deployments/with-durable-objects/).
-- Existing source upgrade review: `plans/cloudflare-os-upgrade-2026-09.md`.
+- Existing source upgrade review: `plans/archive/cloudflare-os-upgrade-2026-09.md`.

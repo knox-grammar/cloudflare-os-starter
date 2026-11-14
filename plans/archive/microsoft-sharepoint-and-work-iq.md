@@ -13,9 +13,9 @@ The direct Graph integration remains the production path. Work IQ is an optional
 
 Authoritative inputs:
 
-- Existing Gatekeeper plan: [`plans/gatekeeper-microsoft.md`](gatekeeper-microsoft.md)
-- Microsoft MCP research: [`docs/microsoft-mcp-options.md`](../docs/microsoft-mcp-options.md)
-- Gatekeeper implementation process: [`cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md`](../cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md)
+- Existing Gatekeeper plan: [`plans/archive/gatekeeper-microsoft.md`](gatekeeper-microsoft.md)
+- Microsoft MCP research: [`docs/archive/microsoft-mcp-options.md`](../../docs/archive/microsoft-mcp-options.md)
+- Gatekeeper implementation process: [`cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md`](../../cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md)
 - Microsoft selected permissions: <https://learn.microsoft.com/en-us/graph/permissions-selected-overview>
 - Work IQ overview: <https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview>
 - SharePoint MCP tools: <https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-sharepoint-tools>
@@ -322,7 +322,7 @@ Hard invariants:
 
 ## Delivery tasks
 
-Task status and dependencies are mirrored in [`plans/microsoft-sharepoint-and-work-iq.json`](microsoft-sharepoint-and-work-iq.json).
+Task status and dependencies are mirrored in [`plans/archive/microsoft-sharepoint-and-work-iq.json`](microsoft-sharepoint-and-work-iq.json).
 
 ### S0 — Confirm authority and tenant operations
 

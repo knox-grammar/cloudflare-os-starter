@@ -10,7 +10,7 @@ modelled on `cloudflare-os/packages/gatekeeper-google/`. Lives in this wrapper r
 upgrades never clobber it.
 
 Authoritative process guide:
-[`cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md`](../cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md)
+[`cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md`](../../cloudflare-os/.agents/skills/write-gatekeeper/SKILL.md)
 and its `SKELETON.md`. Read both before implementing.
 
 ## The central decision: delegated OAuth, never app-only

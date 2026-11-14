@@ -1,6 +1,6 @@
 # WorkIQ MCP: skills-first reassessment
 
-Status: historical assessment. The operator subsequently approved the WorkIQ-first pivot and the complete native MCP interface, now implemented locally in [the minimal WorkIQ plan](../plans/workiq-minimal.md). Tenant setup, credentials, billing and deployment remain separately gated; Graph/save-as work is preserved on its archive branch.
+Status: historical assessment. The operator subsequently approved the WorkIQ-first pivot and the complete native MCP interface, now implemented locally in [the minimal WorkIQ plan](../../plans/archive/workiq-minimal.md). Tenant setup, credentials, billing and deployment remain separately gated; Graph/save-as work is preserved on its archive branch.
 
 The read-first sequencing and narrower operation recommendations below record the assessment at the time. The approved complete MCP implementation supersedes that sequencing, not the licensing, policy, privacy or contractual caveats.
 
@@ -94,7 +94,7 @@ For school-wide rollout, confirm education/minor-user eligibility, privacy/data 
 
 The supplied pages say '10 tools', while the reference contains eleven named tool sections including `fetch_blob`. Examples use `list_agent` instead of documented `list_agents`, and `parentUrl` instead of `functionUrl` for `call_function`. The allowed-prefix summary omits paths referenced by other examples. Treat the live approved catalog and tested semantics as evidence; never copy an example typo or infer universal Graph coverage. [S1, S3, S12]
 
-No live tenant inspection, OAuth/consent, billing activation, mutation, installation, load test, or deployment was performed in this assessment. Subsequent local discovery and the approved full-interface implementation are recorded separately in `plans/workiq-minimal.progress.md`; they do not establish beta release readiness.
+No live tenant inspection, OAuth/consent, billing activation, mutation, installation, load test, or deployment was performed in this assessment. Subsequent local discovery and the approved full-interface implementation are recorded separately in `plans/archive/workiq-minimal.progress.md`; they do not establish beta release readiness.
 
 ## Primary sources
 
