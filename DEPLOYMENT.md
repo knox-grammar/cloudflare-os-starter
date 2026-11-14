@@ -9,8 +9,10 @@ before making any change described here.
 
 - **Account:** Knox Grammar School Enterprise, `2ddaede0fbdd479a6bf410a5f1eb76ad`
 - **Route:** https://os.knoxi.dev (zone `knoxi.dev`, Worker Custom Domain on the router)
-- **Access:** self-hosted app, issuer `https://knoxgrammar.cloudflareaccess.com`, audience
-  `8623541e237ab1d2eee15a213ba7539c45e20f9e8f922c62aa6f78571c9fad6a`
+- **Access:** self-hosted app "Knoxi Apps - knox-os", issuer `https://knoxgrammar.cloudflareaccess.com`, audience
+  `8623541e237ab1d2eee15a213ba7539c45e20f9e8f922c62aa6f78571c9fad6a`. Its destinations are the
+  hostname `os.knoxi.dev` and the `knox-os` Worker. Keep the hostname: Worker-level Access refuses
+  WebSocket upgrades, which the Workshop needs, and `cf-os check` recognizes only hostnames.
 - **Admins:** `carrickm@knox.nsw.edu.au` (see `deployment.jsonc` for the current list)
 
 ## Workers
@@ -75,20 +77,32 @@ skill before customizing or enabling it for real use.
 
 ## Current version IDs (last-known-good)
 
-Queried from Cloudflare deployments on 2026-09-28 (these versions were deployed 2026-09-15,
-after the previously recorded `2e37d67f` upgrade). The exact source commit for that later
-deployment was not verified. Worker version rollback of `knox-os-workshop` after a workspace has
-woken is unsafe.
+Deployed 2026-11-14 by the "Deploy production" workflow
+([run 43568281855](https://github.com/knox-grammar/cloudflare-os-starter/actions/runs/43568281855))
+from root `13dbd9e`, core `769474e`. Worker version rollback of `knox-os-workshop` after a
+workspace has woken is unsafe; this deploy added Durable Object migration v4.
 
 | Worker | Version ID |
 | --- | --- |
-| `knox-os` | `04afe915-2854-4cac-8ab7-aebf97bb0409` |
-| `knox-os-workshop` | `9168ae14-8827-4ba2-8231-98ba94e0bac3` |
-| `knox-os-context` | `4b8cc05b-f271-4dbc-8483-8061e313ad19` |
-| `knox-os-scheduler` | `2789e162-f904-421e-a91b-312f0b751ce1` |
-| `knox-os-gatekeeper` | `e5861df6-4695-4701-9fd7-ca16bb912ec5` |
-| `knox-os-gatekeeper-microsoft` | `0d7d6316-0582-4c83-bfb6-5247300e7bdb` |
-| `knox-os-error-reporter` | `8dc27e76-176d-4217-9987-817a18efe542` |
+| `knox-os` | `de45360f-371b-4000-856a-804b5dcab5fe` |
+| `knox-os-workshop` | `429aed7a-ddb9-4a01-9d11-ddc015fbc8a6` |
+| `knox-os-context` | `3a46d9ba-c0cd-44d3-84de-500e443b8e5b` |
+| `knox-os-scheduler` | `2013f70a-ac69-4fa5-b338-5d546eb8b6e0` |
+| `knox-os-gatekeeper` | `7df9b58d-01a5-4ded-8a71-1064662f56fd` |
+| `knox-os-gk-websearch` | `f4e4d929-d883-458d-a61b-c1ff166e956f` |
+| `knox-os-gk-microsoft` | `729391d7-d10b-45f4-b01d-2a87bdfb3093` (code; `cf-os secrets` then added a secrets-only version) |
+| `knox-os-error-reporter` | `4afd15e9-e0fb-444f-9cb8-d0f7049b4326` |
+
+Immediate pre-upgrade rollback targets (2026-11-14, deployed 2026-10-09 from a local machine):
+`knox-os` `67aed6e5-8942-4788-bff7-cd0daac390bd`, `knox-os-workshop`
+`42c8a202-0e1b-4f64-935e-f2e99e498fc5`, `knox-os-context`
+`19adfb4a-757b-4c3e-b79f-1f74aa7f9568`, `knox-os-scheduler`
+`f4b8cc55-37da-466f-949b-1aae61588a70`, `knox-os-gatekeeper`
+`62539468-5934-4900-b87c-a851253ebd38`, `knox-os-gatekeeper-microsoft`
+`8711b39d-4d45-4053-8aed-935054c61d78`, `knox-os-gatekeeper-workiq`
+`fb280a3e-9a02-4cbd-ae78-ea15f1cb3ed3`, `knox-os-error-reporter`
+`86f51f7f-fb1a-4e8c-978b-47a38ae58c29`. The retired Microsoft and WorkIQ Workers are no longer
+bound; rolling the Workshop back is unsafe for the reason above.
 
 Immediate pre-OS-upgrade rollback targets (2026-09-02; Workshop storage may already be
 migrated): `knox-os` `28897f6b-3ef7-4f8f-8d62-ac500de59ba2`, `knox-os-workshop`
@@ -162,11 +176,11 @@ full approved commit SHA, reruns `pnpm cf-os check`, then waits for approval in 
 environment before `pnpm cf-os deploy`. The environment is restricted to `main` and currently
 requires approval by `mylescarrick`. Neither merging nor pushing deploys production.
 
-The deploy workflow is **not activated** until an authorized operator creates a scoped
-`CLOUDFLARE_API_TOKEN` as a **production environment secret** in the Knox fork. Never put
+The deploy workflow uses a scoped `CLOUDFLARE_API_TOKEN` stored as a **production environment
+secret** in the Knox fork (first used 2026-11-14). Never put
 it in a repository secret, tracked file, or chat. Scope it to the Knox account and route and
 verify the actual required Workers/KV/R2/zone permissions; do not grant unrelated accounts.
-No token was installed during the workflow setup. `cf-os deploy` does not set Gatekeeper
+`cf-os deploy` does not set Gatekeeper
 secrets: install the Microsoft 365 Worker's with `pnpm cf-os secrets microsoft` (add
 `--config deployment.staging.jsonc` for staging) after its Worker exists.
 
